@@ -20,23 +20,35 @@ async function githubRequest(path: string, method: string, body?: object) {
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err.message || 'GitHub API error');
+    const error = new Error(err.message || 'GitHub API error') as any;
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }
 
 export async function appendToQueue(text: string, type: string = 'note'): Promise<void> {
-  // fetch current file to get SHA and content
-  const file = await githubRequest(QUEUE_PATH, 'GET');
-  const currentContent = atob(file.content.replace(/\n/g, ''));
-
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
   const entry = `\n- [${timestamp}] (${type}) ${text}`;
-  const newContent = currentContent.trimEnd() + entry + '\n';
 
-  await githubRequest(QUEUE_PATH, 'PUT', {
-    message: `queue: add capture ${timestamp}`,
-    content: btoa(unescape(encodeURIComponent(newContent))),
-    sha: file.sha,
-  });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const file = await githubRequest(QUEUE_PATH, 'GET');
+    const currentContent = atob(file.content.replace(/\n/g, ''));
+    const newContent = currentContent.trimEnd() + entry + '\n';
+
+    try {
+      await githubRequest(QUEUE_PATH, 'PUT', {
+        message: `queue: add capture ${timestamp}`,
+        content: btoa(unescape(encodeURIComponent(newContent))),
+        sha: file.sha,
+      });
+      return;
+    } catch (e: any) {
+      // SHA conflict — vault-sync pushed between our GET and PUT, retry with fresh SHA
+      if (attempt < 2 && (e.status === 409 || e.message?.includes('does not match'))) {
+        continue;
+      }
+      throw e;
+    }
+  }
 }
