@@ -7,7 +7,7 @@
     "@react-navigation/bottom-tabs": "^7.17.1",
     "@react-navigation/native": "^7.3.0",
     "expo": "^56.0.9",
-    "expo-av": "^16.0.8",
+    "expo-audio": "~56.0.11",
     "expo-notifications": "~56.0.16",
     "expo-secure-store": "~56.0.4",
     "expo-sqlite": "~56.0.4",

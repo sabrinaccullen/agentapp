@@ -1,27 +1,10 @@
-let recording: any = null;
+// Audio recording via expo-audio — implemented in Week 2 dev build
+// Web uses Web Speech API; native recording requires a dev build (not Expo Go)
 
 export async function startRecording(): Promise<void> {
-  const { Audio } = require('expo-av');
-  const { status } = await Audio.requestPermissionsAsync();
-  if (status !== 'granted') throw new Error('Microphone permission denied.');
-
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-  });
-
-  const { recording: rec } = await Audio.Recording.createAsync(
-    Audio.RecordingOptionsPresets.HIGH_QUALITY
-  );
-  recording = rec;
+  throw new Error('On-device audio recording coming soon. Use the text input for now.');
 }
 
 export async function stopRecording(): Promise<string | null> {
-  if (!recording) return null;
-  const { Audio } = require('expo-av');
-  await recording.stopAndUnloadAsync();
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-  const uri = recording.getURI();
-  recording = null;
-  return uri;
+  return null;
 }
