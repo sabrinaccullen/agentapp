@@ -16,12 +16,14 @@ function KeyField({
 }: { label: string; placeholder: string; storageKey: string }) {
   const [value, setValue] = useState('');
   const [saved, setSaved] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   const handleSave = async () => {
     if (!value.trim()) { Alert.alert('Error', 'Please enter an API key.'); return; }
     await saveSecure(storageKey, value.trim());
     setSaved(true);
     setValue('');
+    setVisible(false);
   };
 
   const handleClear = async () => {
@@ -33,16 +35,21 @@ function KeyField({
   return (
     <View style={styles.section}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        placeholder={placeholder}
-        placeholderTextColor="#aaa"
-        value={value}
-        onChangeText={setValue}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      <View style={styles.inputRow}>
+        <TextInput
+          style={[styles.input, { flex: 1 }]}
+          placeholder={placeholder}
+          placeholderTextColor="#aaa"
+          value={value}
+          onChangeText={setValue}
+          secureTextEntry={!visible}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <TouchableOpacity style={styles.eyeBtn} onPress={() => setVisible(v => !v)}>
+          <Text style={styles.eyeIcon}>{visible ? '🙈' : '👁'}</Text>
+        </TouchableOpacity>
+      </View>
       <TouchableOpacity style={styles.button} onPress={handleSave}>
         <Text style={styles.buttonText}>Save Key</Text>
       </TouchableOpacity>
@@ -148,7 +155,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    padding: 12, fontSize: 14, color: '#333', marginBottom: 16,
+    padding: 12, fontSize: 14, color: '#333',
   },
   button: {
     backgroundColor: '#6B4EFF', borderRadius: 8,
@@ -157,6 +164,9 @@ const styles = StyleSheet.create({
   buttonSecondary: { backgroundColor: '#8B72FF' },
   buttonDanger: { backgroundColor: '#E53935' },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eyeBtn: { padding: 10 },
+  eyeIcon: { fontSize: 18 },
   savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   savedText: { color: '#4CAF50', fontSize: 14 },
   clearText: { color: '#FF4444', fontSize: 14 },
