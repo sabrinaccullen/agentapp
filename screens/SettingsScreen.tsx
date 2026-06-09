@@ -1,44 +1,38 @@
 import { useState } from 'react';
 import {
   StyleSheet, Text, View, TextInput,
-  TouchableOpacity, Alert, KeyboardAvoidingView, Platform,
+  TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { saveSecure, getSecure, deleteSecure } from '../utils/storage';
 
-const API_KEY_STORAGE_KEY = 'claude_api_key';
-
-export default function SettingsScreen() {
-  const [apiKey, setApiKey] = useState('');
+function KeyField({
+  label, placeholder, storageKey,
+}: { label: string; placeholder: string; storageKey: string }) {
+  const [value, setValue] = useState('');
   const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
-    if (!apiKey.trim()) {
-      Alert.alert('Error', 'Please enter an API key.');
-      return;
-    }
-    await saveSecure(API_KEY_STORAGE_KEY, apiKey.trim());
+    if (!value.trim()) { Alert.alert('Error', 'Please enter an API key.'); return; }
+    await saveSecure(storageKey, value.trim());
     setSaved(true);
-    setApiKey('');
+    setValue('');
   };
 
   const handleClear = async () => {
-    await deleteSecure(API_KEY_STORAGE_KEY);
+    await deleteSecure(storageKey);
     setSaved(false);
-    Alert.alert('Cleared', 'API key removed.');
+    Alert.alert('Cleared', `${label} removed.`);
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <Text style={styles.label}>Claude API Key</Text>
+    <View style={styles.section}>
+      <Text style={styles.label}>{label}</Text>
       <TextInput
         style={styles.input}
-        placeholder="sk-ant-..."
+        placeholder={placeholder}
         placeholderTextColor="#aaa"
-        value={apiKey}
-        onChangeText={setApiKey}
+        value={value}
+        onChangeText={setValue}
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
@@ -46,21 +40,43 @@ export default function SettingsScreen() {
       <TouchableOpacity style={styles.button} onPress={handleSave}>
         <Text style={styles.buttonText}>Save Key</Text>
       </TouchableOpacity>
-
       {saved && (
         <View style={styles.savedRow}>
-          <Text style={styles.savedText}>✓ API key saved</Text>
+          <Text style={styles.savedText}>✓ Key saved</Text>
           <TouchableOpacity onPress={handleClear}>
             <Text style={styles.clearText}>Clear</Text>
           </TouchableOpacity>
         </View>
       )}
+    </View>
+  );
+}
+
+export default function SettingsScreen() {
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.container}>
+        <KeyField
+          label="Claude API Key"
+          placeholder="sk-ant-..."
+          storageKey="claude_api_key"
+        />
+        <KeyField
+          label="OpenAI API Key (Whisper transcription)"
+          placeholder="sk-..."
+          storageKey="openai_api_key"
+        />
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#fff', justifyContent: 'center' },
+  container: { padding: 24, backgroundColor: '#fff', flexGrow: 1 },
+  section: { marginBottom: 32 },
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
   input: {
     borderWidth: 1, borderColor: '#ddd', borderRadius: 8,

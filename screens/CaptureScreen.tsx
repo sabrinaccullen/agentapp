@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
 import {
   StyleSheet, Text, View, TextInput,
-  TouchableOpacity, ScrollView,
+  TouchableOpacity, ScrollView, Platform,
 } from 'react-native';
 import { startListening, stopListening, isSpeechSupported } from '../utils/speech';
+import { startRecording, stopRecording } from '../utils/audio';
+import { transcribeAudio } from '../utils/transcribe';
 import { saveCapture } from '../utils/database';
 
 export default function CaptureScreen() {
@@ -12,9 +14,40 @@ export default function CaptureScreen() {
   const [interimText, setInterimText] = useState('');
   const [textInput, setTextInput] = useState('');
   const [saved, setSaved] = useState(false);
+  const [recordError, setRecordError] = useState('');
   const finalTextRef = useRef('');
 
-  const handleToggleRecording = () => {
+  const handleToggleRecording = async () => {
+    if (Platform.OS !== 'web') {
+      if (isRecording) {
+        setIsRecording(false);
+        setInterimText('Transcribing…');
+        setRecordError('');
+        try {
+          const uri = await stopRecording();
+          if (uri) {
+            const text = await transcribeAudio(uri);
+            finalTextRef.current += (finalTextRef.current ? ' ' : '') + text;
+            setTranscript(finalTextRef.current);
+          }
+        } catch (e: any) {
+          setRecordError(e.message);
+        } finally {
+          setInterimText('');
+        }
+      } else {
+        setSaved(false);
+        setRecordError('');
+        try {
+          await startRecording();
+          setIsRecording(true);
+        } catch (e: any) {
+          setRecordError(e.message);
+        }
+      }
+      return;
+    }
+
     if (isRecording) {
       stopListening();
       setIsRecording(false);
@@ -53,11 +86,15 @@ export default function CaptureScreen() {
   };
 
   const handleDiscard = () => {
-    if (isRecording) stopListening();
+    if (isRecording) {
+      if (Platform.OS === 'web') stopListening();
+      else stopRecording().catch(() => {});
+    }
     setIsRecording(false);
     setTranscript('');
     setTextInput('');
     setInterimText('');
+    setRecordError('');
     finalTextRef.current = '';
     setSaved(false);
   };
@@ -111,6 +148,7 @@ export default function CaptureScreen() {
         </View>
       )}
 
+      {recordError ? <Text style={styles.errorText}>{recordError}</Text> : null}
       {saved && <Text style={styles.savedConfirm}>✓ Capture saved</Text>}
 
     </ScrollView>
@@ -151,4 +189,5 @@ const styles = StyleSheet.create({
   },
   discardText: { color: '#666', fontSize: 15 },
   savedConfirm: { color: '#4CAF50', textAlign: 'center', marginTop: 16, fontSize: 14 },
+  errorText: { color: '#E53935', textAlign: 'center', marginTop: 12, fontSize: 13 },
 });
