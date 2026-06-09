@@ -1,15 +1,18 @@
 {
   "expo": {
-    "name": "agentapp",
+    "name": "Agent App",
     "slug": "agentapp",
     "version": "1.0.0",
+    "owner": "sabrina.cullen",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sabrinacullen.agentapp",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Used to record audio for transcription."
+        "NSMicrophoneUsageDescription": "Used to record audio for transcription.",
+        "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures."
       }
     },
     "android": {
