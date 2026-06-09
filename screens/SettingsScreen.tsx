@@ -3,7 +3,13 @@ import {
   StyleSheet, Text, View, TextInput,
   TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { saveSecure, getSecure, deleteSecure } from '../utils/storage';
+import { saveSecure, deleteSecure } from '../utils/storage';
+import {
+  requestNotificationPermission,
+  scheduleTestNotification,
+  scheduleDailyReminder,
+  cancelAllReminders,
+} from '../utils/notifications';
 
 function KeyField({
   label, placeholder, storageKey,
@@ -52,6 +58,62 @@ function KeyField({
   );
 }
 
+function NotificationsSection() {
+  const [status, setStatus] = useState('');
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.label}>Notifications</Text>
+        <Text style={{ color: '#999', fontSize: 13 }}>Not supported on web — test on device.</Text>
+      </View>
+    );
+  }
+
+  const handleEnable = async () => {
+    const granted = await requestNotificationPermission();
+    setStatus(granted ? '✓ Permission granted' : '✗ Permission denied');
+  };
+
+  const handleTest = async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) { setStatus('✗ Permission denied'); return; }
+    await scheduleTestNotification();
+    setStatus('Test notification fires in 5 seconds');
+  };
+
+  const handleDailyReminder = async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) { setStatus('✗ Permission denied'); return; }
+    await scheduleDailyReminder(9, 0);
+    setStatus('✓ Daily reminder set for 9:00 AM');
+  };
+
+  const handleCancel = async () => {
+    await cancelAllReminders();
+    setStatus('All reminders cancelled');
+  };
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.label}>Notifications</Text>
+      <TouchableOpacity style={styles.button} onPress={handleEnable}>
+        <Text style={styles.buttonText}>Enable Notifications</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.button, styles.buttonSecondary]} onPress={handleTest}>
+        <Text style={styles.buttonText}>Send Test (5s)</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.button, styles.buttonSecondary]} onPress={handleDailyReminder}>
+        <Text style={styles.buttonText}>Set Daily Reminder (9 AM)</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.button, styles.buttonDanger]} onPress={handleCancel}>
+        <Text style={styles.buttonText}>Cancel All Reminders</Text>
+      </TouchableOpacity>
+      {status ? <Text style={styles.savedText}>{status}</Text> : null}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   return (
     <KeyboardAvoidingView
@@ -69,6 +131,7 @@ export default function SettingsScreen() {
           placeholder="sk-..."
           storageKey="openai_api_key"
         />
+        <NotificationsSection />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -84,8 +147,10 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#6B4EFF', borderRadius: 8,
-    padding: 14, alignItems: 'center',
+    padding: 14, alignItems: 'center', marginBottom: 10,
   },
+  buttonSecondary: { backgroundColor: '#8B72FF' },
+  buttonDanger: { backgroundColor: '#E53935' },
   buttonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   savedText: { color: '#4CAF50', fontSize: 14 },
