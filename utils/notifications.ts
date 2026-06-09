@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { addLog } from './log';
 
 export function setupNotificationHandler() {
   if (Platform.OS === 'web') return;
@@ -18,7 +19,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
   const { status } = await Notifications.requestPermissionsAsync();
-  return status === 'granted';
+  const granted = status === 'granted';
+  addLog(granted ? 'info' : 'error', 'notifications', `Permission ${granted ? 'granted' : 'denied'}`);
+  return granted;
 }
 
 export async function scheduleTestNotification(): Promise<void> {
@@ -31,6 +34,7 @@ export async function scheduleTestNotification(): Promise<void> {
       repeats: false,
     },
   });
+  addLog('info', 'notifications', 'Test notification scheduled (fires in 5s)');
 }
 
 export async function scheduleDailyReminder(hour: number, minute: number): Promise<void> {

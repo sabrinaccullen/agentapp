@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { getQueuedCaptures, setQueued } from './database';
 import { getSecure } from './storage';
 import { appendProcessedToQueue } from './vault';
+import { addLog } from './log';
 
 export interface ProcessedCapture {
   id: string;
@@ -68,12 +69,14 @@ Respond with a JSON array only, no other text:
   }));
 
   await Promise.all(queued.map(c => setQueued(c.id, false)));
+  addLog('info', 'queue', `Processed ${results.length} capture(s) with Claude`);
 
   let vaultError: string | undefined;
   try {
     await appendProcessedToQueue(results);
   } catch (e: any) {
     vaultError = e.message;
+    addLog('error', 'queue', `Vault sync failed: ${e.message}`);
   }
 
   return { captures: results, vaultError };

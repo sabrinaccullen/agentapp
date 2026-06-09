@@ -1,4 +1,5 @@
 import { getSecure } from './storage';
+import { addLog } from './log';
 
 const OWNER = 'sabrinaccullen';
 const REPO = 'obsidian-vault';
@@ -22,6 +23,7 @@ async function githubRequest(path: string, method: string, body?: object) {
     const err = await response.json();
     const error = new Error(err.message || 'GitHub API error') as any;
     error.status = response.status;
+    addLog('error', 'vault', `${method} ${path}: ${error.message}`);
     throw error;
   }
   return response.json();
@@ -53,6 +55,7 @@ export async function appendProcessedToQueue(entries: ProcessedEntry[]): Promise
         content: btoa(unescape(encodeURIComponent(newContent))),
         sha: file.sha,
       });
+      addLog('info', 'vault', `${entries.length} processed capture(s) synced to vault`);
       return;
     } catch (e: any) {
       if (attempt < 2 && (e.status === 409 || e.message?.includes('does not match'))) {
@@ -78,6 +81,7 @@ export async function appendToQueue(text: string, type: string = 'note'): Promis
         content: btoa(unescape(encodeURIComponent(newContent))),
         sha: file.sha,
       });
+      addLog('info', 'vault', `Capture appended to queue (attempt ${attempt + 1})`);
       return;
     } catch (e: any) {
       // SHA conflict — vault-sync pushed between our GET and PUT, retry with fresh SHA

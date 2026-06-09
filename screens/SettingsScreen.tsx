@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TextInput,
   TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { saveSecure, deleteSecure } from '../utils/storage';
 import {
   requestNotificationPermission,
@@ -10,6 +11,8 @@ import {
   scheduleDailyReminder,
   cancelAllReminders,
 } from '../utils/notifications';
+import { getLogs, clearLogs, LogEntry } from '../utils/log';
+import { appendToQueue } from '../utils/vault';
 
 function KeyField({
   label, placeholder, storageKey,
@@ -127,6 +130,59 @@ function NotificationsSection() {
   );
 }
 
+function LogSection() {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [sendStatus, setSendStatus] = useState<Record<string, string>>({});
+
+  useFocusEffect(useCallback(() => { setLogs(getLogs()); }, []));
+
+  const handleClear = () => { clearLogs(); setLogs([]); };
+
+  const handleSend = async (entry: LogEntry) => {
+    setSendStatus(s => ({ ...s, [entry.id]: '…' }));
+    try {
+      await appendToQueue(`[${entry.tag}] ${entry.message}`, 'log');
+      setSendStatus(s => ({ ...s, [entry.id]: '✓' }));
+    } catch (e: any) {
+      setSendStatus(s => ({ ...s, [entry.id]: '✗' }));
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <Text style={styles.label}>Event Log</Text>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <TouchableOpacity onPress={() => setLogs(getLogs())}>
+            <Text style={{ color: '#6B4EFF', fontSize: 13 }}>Refresh</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleClear}>
+            <Text style={{ color: '#E53935', fontSize: 13 }}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      {logs.length === 0 ? (
+        <Text style={{ color: '#aaa', fontSize: 13 }}>No events yet — use the app to generate logs.</Text>
+      ) : (
+        logs.map(entry => (
+          <View key={entry.id} style={logStyles.entry}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={[logStyles.tag, entry.level === 'error' && logStyles.tagError]}>
+                {entry.level === 'error' ? '✗' : '✓'} {entry.tag}
+              </Text>
+              <Text style={logStyles.ts}>{entry.ts}</Text>
+            </View>
+            <Text style={logStyles.message}>{entry.message}</Text>
+            <TouchableOpacity onPress={() => handleSend(entry)}>
+              <Text style={logStyles.sendBtn}>{sendStatus[entry.id] ?? 'Send to queue'}</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   return (
     <KeyboardAvoidingView
@@ -150,6 +206,7 @@ export default function SettingsScreen() {
           storageKey="github_token"
         />
         <NotificationsSection />
+        <LogSection />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -176,4 +233,16 @@ const styles = StyleSheet.create({
   savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   savedText: { color: '#4CAF50', fontSize: 14 },
   clearText: { color: '#FF4444', fontSize: 14 },
+});
+
+const logStyles = StyleSheet.create({
+  entry: {
+    borderWidth: 1, borderColor: '#eee', borderRadius: 8,
+    padding: 10, marginBottom: 8, backgroundColor: '#fafafa',
+  },
+  tag: { fontSize: 11, fontWeight: '700', color: '#4CAF50', textTransform: 'uppercase' },
+  tagError: { color: '#E53935' },
+  ts: { fontSize: 11, color: '#bbb' },
+  message: { fontSize: 13, color: '#444', marginTop: 3, marginBottom: 6 },
+  sendBtn: { fontSize: 12, color: '#2196F3', fontWeight: '600' },
 });
