@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { getQueuedCaptures, setQueued } from './database';
 import { getSecure } from './storage';
 
@@ -10,6 +11,10 @@ export interface ProcessedCapture {
 }
 
 export async function processQueue(): Promise<ProcessedCapture[]> {
+  if (Platform.OS === 'web') {
+    throw new Error('Queue processing requires the mobile app — browser security blocks direct API calls.');
+  }
+
   const apiKey = await getSecure('claude_api_key');
   if (!apiKey) throw new Error('Claude API key not set — add it in Settings.');
 
