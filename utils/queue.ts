@@ -58,6 +58,8 @@ Respond with a JSON array only, no other text:
   const results: ProcessedCapture[] = JSON.parse(text).map((r: any, i: number) => ({
     ...r,
     original: queued[i]?.text ?? '',
+    actions: r.actions ?? [],
+    tags: r.tags ?? [],
   }));
 
   await Promise.all([

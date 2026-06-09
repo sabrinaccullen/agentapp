@@ -37,8 +37,8 @@ interface ProcessedEntry {
 export async function appendProcessedToQueue(entries: ProcessedEntry[]): Promise<void> {
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
   const lines = entries.map(e => {
-    const actionsLine = e.actions.length ? `\n  - actions: ${e.actions.join('; ')}` : '';
-    const tagsLine = e.tags.length ? `\n  - tags: ${e.tags.join(', ')}` : '';
+    const actionsLine = e.actions?.length ? `\n  - actions: ${e.actions.join('; ')}` : '';
+    const tagsLine = e.tags?.length ? `\n  - tags: ${e.tags.join(', ')}` : '';
     return `- [${timestamp}] (processed) ${e.cleaned}${actionsLine}${tagsLine}`;
   }).join('\n');
 
