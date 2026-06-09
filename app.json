@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.sabrinacullen.agentapp",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Used to record audio for transcription.",
-        "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures."
+        "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -37,6 +38,11 @@
           "color": "#6B4EFF"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "421bec15-03bf-4964-8434-a263560a7f39"
+      }
+    }
   }
 }
