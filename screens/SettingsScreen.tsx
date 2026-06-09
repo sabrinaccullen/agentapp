@@ -77,29 +77,35 @@ function NotificationsSection() {
     );
   }
 
-  const handleEnable = async () => {
-    const granted = await requestNotificationPermission();
-    setStatus(granted ? '✓ Permission granted' : '✗ Permission denied');
+  const run = async (fn: () => Promise<string>) => {
+    setStatus('…');
+    try { setStatus(await fn()); }
+    catch (e: any) { setStatus(`✗ ${e.message}`); }
   };
 
-  const handleTest = async () => {
+  const handleEnable = () => run(async () => {
     const granted = await requestNotificationPermission();
-    if (!granted) { setStatus('✗ Permission denied'); return; }
+    return granted ? '✓ Permission granted' : '✗ Permission denied — check Settings > Notifications';
+  });
+
+  const handleTest = () => run(async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) return '✗ Permission denied — check Settings > Notifications';
     await scheduleTestNotification();
-    setStatus('Test notification fires in 5 seconds');
-  };
+    return '✓ Notification scheduled — lock your phone and wait 5s';
+  });
 
-  const handleDailyReminder = async () => {
+  const handleDailyReminder = () => run(async () => {
     const granted = await requestNotificationPermission();
-    if (!granted) { setStatus('✗ Permission denied'); return; }
+    if (!granted) return '✗ Permission denied';
     await scheduleDailyReminder(9, 0);
-    setStatus('✓ Daily reminder set for 9:00 AM');
-  };
+    return '✓ Daily reminder set for 9:00 AM';
+  });
 
-  const handleCancel = async () => {
+  const handleCancel = () => run(async () => {
     await cancelAllReminders();
-    setStatus('All reminders cancelled');
-  };
+    return 'All reminders cancelled';
+  });
 
   return (
     <View style={styles.section}>
