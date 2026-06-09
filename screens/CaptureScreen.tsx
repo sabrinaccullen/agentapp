@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { startListening, stopListening, isSpeechSupported } from '../utils/speech';
@@ -106,6 +106,7 @@ export default function CaptureScreen() {
 
   const handleTabChange = async (newTab: CaptureTab) => {
     if (newTab === tab) return;
+    Keyboard.dismiss();
     if (newTab === 'dictate') {
       setTab('dictate');
       await startDictation();
@@ -140,8 +141,8 @@ export default function CaptureScreen() {
     interimRef.current = '';
   };
 
-  const insertBullet = () => setText(t => t + (t.endsWith('\n') || !t ? '- ' : '\n- '));
-  const insertDivider = () => setText(t => t + (t.endsWith('\n') || !t ? '---\n' : '\n---\n'));
+  const insertBullet = () => { Keyboard.dismiss(); setText(t => t + (t.endsWith('\n') || !t ? '- ' : '\n- ')); };
+  const insertDivider = () => { Keyboard.dismiss(); setText(t => t + (t.endsWith('\n') || !t ? '---\n' : '\n---\n')); };
 
   const hasContent = text.trim().length > 0 || isListening;
   const displayText = text + (interimText ? (text ? ' ' : '') + interimText : '');
