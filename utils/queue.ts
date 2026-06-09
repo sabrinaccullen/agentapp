@@ -52,7 +52,8 @@ Respond with a JSON array only, no other text:
   }
 
   const data = await response.json();
-  const text = data.content[0].text.trim();
+  const raw = data.content[0].text.trim();
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const results: ProcessedCapture[] = JSON.parse(text).map((r: any, i: number) => ({
     ...r,
     original: queued[i]?.text ?? '',
