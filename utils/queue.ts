@@ -11,7 +11,12 @@ export interface ProcessedCapture {
   tags: string[];
 }
 
-export async function processQueue(): Promise<ProcessedCapture[]> {
+export interface ProcessQueueResult {
+  captures: ProcessedCapture[];
+  vaultError?: string;
+}
+
+export async function processQueue(): Promise<ProcessQueueResult> {
   if (Platform.OS === 'web') {
     throw new Error('Queue processing requires the mobile app — browser security blocks direct API calls.');
   }
@@ -62,10 +67,14 @@ Respond with a JSON array only, no other text:
     tags: r.tags ?? [],
   }));
 
-  await Promise.all([
-    Promise.all(queued.map(c => setQueued(c.id, false))),
-    appendProcessedToQueue(results).catch(() => {}),
-  ]);
+  await Promise.all(queued.map(c => setQueued(c.id, false)));
 
-  return results;
+  let vaultError: string | undefined;
+  try {
+    await appendProcessedToQueue(results);
+  } catch (e: any) {
+    vaultError = e.message;
+  }
+
+  return { captures: results, vaultError };
 }

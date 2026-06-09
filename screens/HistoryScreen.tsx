@@ -5,14 +5,14 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllCaptures, deleteCapture, setQueued, Capture } from '../utils/database';
-import { processQueue, ProcessedCapture } from '../utils/queue';
+import { processQueue, ProcessedCapture, ProcessQueueResult } from '../utils/queue';
 import { appendToQueue } from '../utils/vault';
 
 export default function HistoryScreen() {
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState<ProcessedCapture[] | null>(null);
+  const [results, setResults] = useState<ProcessQueueResult | null>(null);
   const [vaultStatus, setVaultStatus] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
@@ -47,6 +47,7 @@ export default function HistoryScreen() {
     try {
       const out = await processQueue();
       setResults(out);
+      if (out.vaultError) setError(`Vault sync failed: ${out.vaultError}`);
       load();
     } catch (e: any) {
       setError(e.message);
@@ -58,8 +59,9 @@ export default function HistoryScreen() {
   if (results) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.resultsHeader}>Queue processed — {results.length} note{results.length !== 1 ? 's' : ''}</Text>
-        {results.map(r => (
+        <Text style={styles.resultsHeader}>Queue processed — {results.captures.length} note{results.captures.length !== 1 ? 's' : ''}</Text>
+        {results.vaultError && <Text style={styles.errorText}>⚠ Vault sync failed: {results.vaultError}</Text>}
+        {results.captures.map(r => (
           <View key={r.id} style={styles.resultCard}>
             <Text style={styles.resultLabel}>Original</Text>
             <Text style={styles.resultOriginal}>{r.original}</Text>
