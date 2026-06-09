@@ -6,6 +6,7 @@ export interface Capture {
   createdAt: number;
   type: 'note' | 'quick-add';
   synced: boolean;
+  queued: boolean;
 }
 
 // --- Web fallback (localStorage) ---
@@ -35,11 +36,25 @@ async function getDb() {
         text TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         type TEXT NOT NULL,
-        synced INTEGER DEFAULT 0
+        synced INTEGER DEFAULT 0,
+        queued INTEGER DEFAULT 0
       );
     `);
+    // migrate existing installs that predate the queued column
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN queued INTEGER DEFAULT 0'); } catch {}
   }
   return db;
+}
+
+function rowToCapture(row: any): Capture {
+  return {
+    id: row.id,
+    text: row.text,
+    createdAt: row.created_at,
+    type: row.type as 'note' | 'quick-add',
+    synced: Boolean(row.synced),
+    queued: Boolean(row.queued),
+  };
 }
 
 // --- Public API ---
@@ -54,6 +69,7 @@ export async function saveCapture(
     createdAt: Date.now(),
     type,
     synced: false,
+    queued: false,
   };
 
   if (Platform.OS === 'web') {
@@ -65,28 +81,19 @@ export async function saveCapture(
 
   const database = await getDb();
   await database.runAsync(
-    'INSERT INTO captures (id, text, created_at, type, synced) VALUES (?, ?, ?, ?, ?)',
-    [capture.id, capture.text, capture.createdAt, capture.type, 0]
+    'INSERT INTO captures (id, text, created_at, type, synced, queued) VALUES (?, ?, ?, ?, ?, ?)',
+    [capture.id, capture.text, capture.createdAt, capture.type, 0, 0]
   );
   return capture;
 }
 
 export async function getAllCaptures(): Promise<Capture[]> {
   if (Platform.OS === 'web') {
-    return webGetAll();
+    return webGetAll().map(c => ({ ...c, queued: c.queued ?? false }));
   }
-
   const database = await getDb();
-  const rows = await database.getAllAsync(
-    'SELECT * FROM captures ORDER BY created_at DESC'
-  );
-  return rows.map((row: any) => ({
-    id: row.id,
-    text: row.text,
-    createdAt: row.created_at,
-    type: row.type as 'note' | 'quick-add',
-    synced: Boolean(row.synced),
-  }));
+  const rows = await database.getAllAsync('SELECT * FROM captures ORDER BY created_at DESC');
+  return rows.map(rowToCapture);
 }
 
 export async function deleteCapture(id: string): Promise<void> {
@@ -94,7 +101,26 @@ export async function deleteCapture(id: string): Promise<void> {
     webSaveAll(webGetAll().filter(c => c.id !== id));
     return;
   }
-
   const database = await getDb();
   await database.runAsync('DELETE FROM captures WHERE id = ?', [id]);
+}
+
+export async function setQueued(id: string, queued: boolean): Promise<void> {
+  if (Platform.OS === 'web') {
+    webSaveAll(webGetAll().map(c => c.id === id ? { ...c, queued } : c));
+    return;
+  }
+  const database = await getDb();
+  await database.runAsync('UPDATE captures SET queued = ? WHERE id = ?', [queued ? 1 : 0, id]);
+}
+
+export async function getQueuedCaptures(): Promise<Capture[]> {
+  if (Platform.OS === 'web') {
+    return webGetAll().filter(c => c.queued);
+  }
+  const database = await getDb();
+  const rows = await database.getAllAsync(
+    'SELECT * FROM captures WHERE queued = 1 ORDER BY created_at ASC'
+  );
+  return rows.map(rowToCapture);
 }
