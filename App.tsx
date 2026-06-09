@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CaptureScreen from './screens/CaptureScreen';
 import QuickAddScreen from './screens/QuickAddScreen';
 import HistoryScreen from './screens/HistoryScreen';
+import ConversationScreen from './screens/ConversationScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { setupNotificationHandler } from './utils/notifications';
 
@@ -14,10 +15,11 @@ const Tab = createBottomTabNavigator();
 type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
 
 const ICONS: Record<string, [IoniconsName, IoniconsName]> = {
-  Capture:  ['mic',     'mic-outline'],
-  Quick:    ['flash',   'flash-outline'],
-  History:  ['time',    'time-outline'],
-  Settings: ['settings','settings-outline'],
+  Capture:  ['mic',           'mic-outline'],
+  Quick:    ['flash',         'flash-outline'],
+  History:  ['time',          'time-outline'],
+  Chat:     ['chatbubble',    'chatbubble-outline'],
+  Settings: ['settings',      'settings-outline'],
 };
 
 export default function App() {
@@ -40,6 +42,7 @@ export default function App() {
         <Tab.Screen name="Capture" component={CaptureScreen} />
         <Tab.Screen name="Quick" component={QuickAddScreen} />
         <Tab.Screen name="History" component={HistoryScreen} />
+        <Tab.Screen name="Chat" component={ConversationScreen} />
         <Tab.Screen name="Settings" component={SettingsScreen} />
       </Tab.Navigator>
     </NavigationContainer>
