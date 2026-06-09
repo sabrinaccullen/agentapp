@@ -25,7 +25,11 @@ export async function scheduleTestNotification(): Promise<void> {
   const Notifications = require('expo-notifications');
   await Notifications.scheduleNotificationAsync({
     content: { title: 'Agent App', body: 'Notifications are working!' },
-    trigger: { seconds: 5 },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: 5,
+      repeats: false,
+    },
   });
 }
 
@@ -37,7 +41,11 @@ export async function scheduleDailyReminder(hour: number, minute: number): Promi
       title: 'Daily Capture',
       body: "Don't forget to log your thoughts today.",
     },
-    trigger: { hour, minute, repeats: true },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+    },
   });
 }
 
