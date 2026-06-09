@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { getQueuedCaptures, setQueued } from './database';
 import { getSecure } from './storage';
+import { appendProcessedToQueue } from './vault';
 
 export interface ProcessedCapture {
   id: string;
@@ -59,8 +60,10 @@ Respond with a JSON array only, no other text:
     original: queued[i]?.text ?? '',
   }));
 
-  // mark all processed items as unqueued
-  await Promise.all(queued.map(c => setQueued(c.id, false)));
+  await Promise.all([
+    Promise.all(queued.map(c => setQueued(c.id, false))),
+    appendProcessedToQueue(results).catch(() => {}),
+  ]);
 
   return results;
 }

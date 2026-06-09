@@ -27,6 +27,42 @@ async function githubRequest(path: string, method: string, body?: object) {
   return response.json();
 }
 
+interface ProcessedEntry {
+  original: string;
+  cleaned: string;
+  actions: string[];
+  tags: string[];
+}
+
+export async function appendProcessedToQueue(entries: ProcessedEntry[]): Promise<void> {
+  const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const lines = entries.map(e => {
+    const actionsLine = e.actions.length ? `\n  - actions: ${e.actions.join('; ')}` : '';
+    const tagsLine = e.tags.length ? `\n  - tags: ${e.tags.join(', ')}` : '';
+    return `- [${timestamp}] (processed) ${e.cleaned}${actionsLine}${tagsLine}`;
+  }).join('\n');
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const file = await githubRequest(QUEUE_PATH, 'GET');
+    const currentContent = atob(file.content.replace(/\n/g, ''));
+    const newContent = currentContent.trimEnd() + '\n' + lines + '\n';
+
+    try {
+      await githubRequest(QUEUE_PATH, 'PUT', {
+        message: `queue: ${entries.length} processed capture(s) ${timestamp}`,
+        content: btoa(unescape(encodeURIComponent(newContent))),
+        sha: file.sha,
+      });
+      return;
+    } catch (e: any) {
+      if (attempt < 2 && (e.status === 409 || e.message?.includes('does not match'))) {
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 export async function appendToQueue(text: string, type: string = 'note'): Promise<void> {
   const timestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
   const entry = `\n- [${timestamp}] (${type}) ${text}`;
