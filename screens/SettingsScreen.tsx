@@ -131,6 +131,11 @@ export default function SettingsScreen() {
           placeholder="sk-..."
           storageKey="openai_api_key"
         />
+        <KeyField
+          label="GitHub Token (vault sync)"
+          placeholder="ghp_..."
+          storageKey="github_token"
+        />
         <NotificationsSection />
       </ScrollView>
     </KeyboardAvoidingView>

@@ -6,12 +6,14 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllCaptures, deleteCapture, setQueued, Capture } from '../utils/database';
 import { processQueue, ProcessedCapture } from '../utils/queue';
+import { appendToQueue } from '../utils/vault';
 
 export default function HistoryScreen() {
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState<ProcessedCapture[] | null>(null);
+  const [vaultStatus, setVaultStatus] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     getAllCaptures()
@@ -26,6 +28,16 @@ export default function HistoryScreen() {
   const handleToggleQueue = async (item: Capture) => {
     await setQueued(item.id, !item.queued);
     load();
+  };
+
+  const handleSendToVault = async (item: Capture) => {
+    setVaultStatus(s => ({ ...s, [item.id]: 'sending…' }));
+    try {
+      await appendToQueue(item.text, item.type);
+      setVaultStatus(s => ({ ...s, [item.id]: '✓ sent' }));
+    } catch (e: any) {
+      setVaultStatus(s => ({ ...s, [item.id]: `✗ ${e.message}` }));
+    }
   };
 
   const handleProcess = async () => {
@@ -111,6 +123,11 @@ export default function HistoryScreen() {
               <View style={styles.row}>
                 <Text style={styles.date}>{new Date(item.createdAt).toLocaleString()}</Text>
                 <View style={styles.actions}>
+                  <TouchableOpacity onPress={() => handleSendToVault(item)}>
+                    <Text style={styles.vaultText}>
+                      {vaultStatus[item.id] ?? 'Vault'}
+                    </Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleToggleQueue(item)} style={styles.queueToggle}>
                     <Text style={[styles.queueToggleText, item.queued && styles.queueToggleActive]}>
                       {item.queued ? 'Queued ✓' : 'Queue'}
@@ -154,6 +171,7 @@ const styles = StyleSheet.create({
   date: { fontSize: 12, color: '#999', flex: 1 },
   actions: { flexDirection: 'row', gap: 12 },
   queueToggle: { paddingHorizontal: 4 },
+  vaultText: { color: '#2196F3', fontSize: 12, fontWeight: '600' },
   queueToggleText: { color: '#6B4EFF', fontSize: 12, fontWeight: '600' },
   queueToggleActive: { color: '#4CAF50' },
   deleteText: { color: '#E53935', fontSize: 12 },
