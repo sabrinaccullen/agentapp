@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
+  KeyboardAvoidingView, TouchableWithoutFeedback, Platform, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { startListening, stopListening, isSpeechSupported } from '../utils/speech';
@@ -153,6 +153,7 @@ export default function CaptureScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={90}
     >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
 
         {/* Header */}
@@ -252,6 +253,7 @@ export default function CaptureScreen() {
         </View>
 
       </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

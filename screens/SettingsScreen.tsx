@@ -70,6 +70,8 @@ function KeyField({
 
 function NotificationsSection() {
   const [status, setStatus] = useState('');
+  const [hour, setHour] = useState(9);
+  const [isPM, setIsPM] = useState(false);
 
   if (Platform.OS === 'web') {
     return (
@@ -79,6 +81,18 @@ function NotificationsSection() {
       </View>
     );
   }
+
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const hour24 = isPM ? (hour === 12 ? 12 : hour + 12) : (hour === 12 ? 0 : hour);
+
+  const adjustHour = (delta: number) => {
+    setHour(h => {
+      const next = h + delta;
+      if (next > 12) return 1;
+      if (next < 1) return 12;
+      return next;
+    });
+  };
 
   const run = async (fn: () => Promise<string>) => {
     setStatus('…');
@@ -101,8 +115,8 @@ function NotificationsSection() {
   const handleDailyReminder = () => run(async () => {
     const granted = await requestNotificationPermission();
     if (!granted) return '✗ Permission denied';
-    await scheduleDailyReminder(9, 0);
-    return '✓ Daily reminder set for 9:00 AM';
+    await scheduleDailyReminder(hour24, 0);
+    return `✓ Daily reminder set for ${displayHour}:00 ${isPM ? 'PM' : 'AM'}`;
   });
 
   const handleCancel = () => run(async () => {
@@ -113,6 +127,21 @@ function NotificationsSection() {
   return (
     <View style={styles.section}>
       <Text style={styles.label}>Notifications</Text>
+
+      <Text style={[styles.label, { fontSize: 12, color: '#888', marginBottom: 8 }]}>Reminder time</Text>
+      <View style={notifStyles.timePicker}>
+        <TouchableOpacity style={notifStyles.stepBtn} onPress={() => adjustHour(-1)}>
+          <Text style={notifStyles.stepIcon}>−</Text>
+        </TouchableOpacity>
+        <Text style={notifStyles.timeDisplay}>{displayHour}:00</Text>
+        <TouchableOpacity style={notifStyles.stepBtn} onPress={() => adjustHour(1)}>
+          <Text style={notifStyles.stepIcon}>+</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={notifStyles.ampmBtn} onPress={() => setIsPM(p => !p)}>
+          <Text style={notifStyles.ampmText}>{isPM ? 'PM' : 'AM'}</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity style={styles.button} onPress={handleEnable}>
         <Text style={styles.buttonText}>Enable Notifications</Text>
       </TouchableOpacity>
@@ -120,7 +149,7 @@ function NotificationsSection() {
         <Text style={styles.buttonText}>Send Test (5s)</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.button, styles.buttonSecondary]} onPress={handleDailyReminder}>
-        <Text style={styles.buttonText}>Set Daily Reminder (9 AM)</Text>
+        <Text style={styles.buttonText}>Set Daily Reminder</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.button, styles.buttonDanger]} onPress={handleCancel}>
         <Text style={styles.buttonText}>Cancel All Reminders</Text>
@@ -233,6 +262,24 @@ const styles = StyleSheet.create({
   savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   savedText: { color: '#4CAF50', fontSize: 14 },
   clearText: { color: '#FF4444', fontSize: 14 },
+});
+
+const notifStyles = StyleSheet.create({
+  timePicker: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 16,
+    backgroundColor: '#f5f5f5', borderRadius: 10, padding: 8, gap: 8,
+  },
+  stepBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#6B4EFF', alignItems: 'center', justifyContent: 'center',
+  },
+  stepIcon: { color: '#fff', fontSize: 22, fontWeight: '700', lineHeight: 26 },
+  timeDisplay: { fontSize: 26, fontWeight: '700', color: '#1a1a1a', minWidth: 72, textAlign: 'center' },
+  ampmBtn: {
+    backgroundColor: '#e8e4ff', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6, marginLeft: 4,
+  },
+  ampmText: { fontSize: 15, fontWeight: '700', color: '#6B4EFF' },
 });
 
 const logStyles = StyleSheet.create({
