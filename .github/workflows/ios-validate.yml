@@ -1,0 +1,83 @@
+name: iOS Voice Validation
+
+on:
+  push:
+    branches: [downgrade-voice-3.1.5, main]
+    paths:
+      - 'utils/voice.ts'
+      - 'utils/speech.ts'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+jobs:
+  eas-build:
+    name: EAS iOS Build (cloud)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: EAS iOS preview build
+        run: npx eas build --platform ios --profile preview --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  pod-check:
+    name: Podfile.lock & native headers (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Expo prebuild (generates ios/ dir)
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Pod install
+        run: |
+          cd ios
+          pod install --repo-update
+        env:
+          # Silence CocoaPods analytics
+          CP_HOME_DIR: /tmp/.cocoapods
+
+      - name: Upload Podfile.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: Podfile.lock
+          path: ios/Podfile.lock
+
+      - name: Check for RCTCallableJSModules in voice module
+        run: |
+          VOICE_M="ios/Pods/Headers/Public/RNCVoice/Voice.h"
+          if [ -f "$VOICE_M" ]; then
+            echo "=== Voice.h (relevant lines) ==="
+            grep -n "RCTCallable\|callableJS\|modules" "$VOICE_M" || echo "(no matches)"
+          else
+            echo "Voice.h not found at expected path — listing pod headers:"
+            find ios/Pods/Headers -name "Voice*" 2>/dev/null || echo "(none found)"
+          fi
+
+      - name: Upload voice native headers
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: voice-native-headers
+          path: ios/Pods/Headers/**/*Voice*
