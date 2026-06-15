@@ -1,36 +1,18 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
-import { sendMessage, Message, ConversationMode } from '../utils/conversation';
+import { useFocusEffect } from '@react-navigation/native';
+import { sendMessage, Message } from '../utils/conversation';
 import { startListening, stopListening, isSpeechSupported } from '../utils/speech';
 import { startRecording, stopRecording } from '../utils/audio';
 import { transcribeAudio } from '../utils/transcribe';
 
-const MODES: { key: ConversationMode; label: string; color: string; suggestions: string[] }[] = [
-  {
-    key: 'task',
-    label: 'Task',
-    color: '#FF6B35',
-    suggestions: ['Remind me to call the bank at 2pm', 'Add milk to my grocery list', 'What tasks are due today?'],
-  },
-  {
-    key: 'chat',
-    label: 'Rubber Duck',
-    color: '#6B4EFF',
-    suggestions: ["I'm feeling stuck on something", "What's been on my mind lately?", 'Help me think through a decision'],
-  },
-  {
-    key: 'plan',
-    label: 'Plan',
-    color: '#2196F3',
-    suggestions: ['Help me plan my week', 'Build out a project page for my costume', 'What should I focus on to hit my June 30 deadline?'],
-  },
-];
+const ACCENT = '#6B4EFF';
 
 export default function ConversationScreen() {
-  const [mode, setMode] = useState<ConversationMode>('chat');
+  const [mode] = useState('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,7 +20,17 @@ export default function ConversationScreen() {
   const [isListening, setIsListening] = useState(false);
   const listRef = useRef<FlatList>(null);
   const interimRef = useRef('');
-  const currentMode = MODES.find(m => m.key === mode)!;
+  const isListeningRef = useRef(false);
+  useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
+
+  useFocusEffect(useCallback(() => {
+    return () => {
+      if (!isListeningRef.current) return;
+      if (Platform.OS === 'web') stopListening();
+      else stopRecording().catch(() => {});
+      setIsListening(false);
+    };
+  }, []));;
 
   const handleSend = async (text?: string) => {
     const content = (text ?? input).trim();
@@ -50,7 +42,7 @@ export default function ConversationScreen() {
     setError('');
     setLoading(true);
     try {
-      const reply = await sendMessage(content, messages, mode);
+      const reply = await sendMessage(content, messages);
       setMessages([...next, { role: 'assistant', content: reply }]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
@@ -117,18 +109,11 @@ export default function ConversationScreen() {
     }
   };
 
-  const handleModeChange = (newMode: ConversationMode) => {
-    setMode(newMode);
-    setMessages([]);
-    setInput('');
-    setError('');
-  };
-
   const renderMessage = ({ item }: { item: Message }) => {
     const isUser = item.role === 'user';
     return (
       <View style={[styles.bubble, isUser
-        ? [styles.userBubble, { backgroundColor: currentMode.color }]
+        ? [styles.userBubble, { backgroundColor: ACCENT }]
         : styles.assistantBubble
       ]}>
         <Text style={[styles.bubbleText, isUser ? styles.userText : styles.assistantText]}>
@@ -148,33 +133,9 @@ export default function ConversationScreen() {
     >
       <View style={{ flex: 1, backgroundColor: '#fff' }}>
 
-        {/* Mode selector */}
-        <View style={styles.modeBar}>
-          {MODES.map(m => (
-            <TouchableOpacity
-              key={m.key}
-              style={[styles.modeBtn, mode === m.key && { backgroundColor: m.color }]}
-              onPress={() => handleModeChange(m.key)}
-            >
-              <Text style={[styles.modeBtnText, mode === m.key && styles.modeBtnTextActive]}>
-                {m.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {messages.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyHint}>
-              {isRubberDuck
-                ? 'Press and hold the mic to speak.'
-                : 'What do you need?'}
-            </Text>
-            {currentMode.suggestions.map(s => (
-              <TouchableOpacity key={s} style={[styles.suggestion, { borderColor: currentMode.color }]} onPress={() => handleSend(s)}>
-                <Text style={[styles.suggestionText, { color: currentMode.color }]}>{s}</Text>
-              </TouchableOpacity>
-            ))}
+            <Text style={styles.emptyHint}>Press and hold the mic to speak.</Text>
           </View>
         ) : (
           <FlatList
@@ -189,10 +150,8 @@ export default function ConversationScreen() {
 
         {loading && (
           <View style={styles.typingRow}>
-            <ActivityIndicator size="small" color={currentMode.color} />
-            <Text style={styles.typingText}>
-              {mode === 'task' ? 'on it…' : mode === 'plan' ? 'planning…' : 'thinking…'}
-            </Text>
+            <ActivityIndicator size="small" color={ACCENT} />
+            <Text style={styles.typingText}>thinking…</Text>
           </View>
         )}
 
@@ -202,7 +161,7 @@ export default function ConversationScreen() {
         <View style={styles.inputRow}>
           {isRubberDuck ? (
             <TouchableOpacity
-              style={[styles.holdMicBtn, { backgroundColor: isListening ? '#E53935' : currentMode.color }]}
+              style={[styles.holdMicBtn, { backgroundColor: isListening ? '#E53935' : ACCENT }]}
               onPressIn={handleMicPressIn}
               onPressOut={handleMicPressOut}
               delayLongPress={0}
@@ -228,7 +187,7 @@ export default function ConversationScreen() {
                 onSubmitEditing={() => handleSend()}
               />
               <TouchableOpacity
-                style={[styles.sendBtn, { backgroundColor: currentMode.color }, (!input.trim() || loading) && styles.sendBtnDisabled]}
+                style={[styles.sendBtn, { backgroundColor: ACCENT }, (!input.trim() || loading) && styles.sendBtnDisabled]}
                 onPress={() => handleSend()}
                 disabled={!input.trim() || loading}
               >

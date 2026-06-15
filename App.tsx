@@ -1,50 +1,52 @@
 import { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import CaptureScreen from './screens/CaptureScreen';
-import QuickAddScreen from './screens/QuickAddScreen';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  CormorantGaramond_400Regular,
+  CormorantGaramond_400Regular_Italic,
+  CormorantGaramond_600SemiBold,
+} from '@expo-google-fonts/cormorant-garamond';
+import { ThemeProvider } from './contexts/ThemeContext';
+import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
-import ConversationScreen from './screens/ConversationScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import { setupNotificationHandler } from './utils/notifications';
+import type { RootStackParamList } from './screens/HomeScreen';
 
-const Tab = createBottomTabNavigator();
-
-type IoniconsName = React.ComponentProps<typeof Ionicons>['name'];
-
-const ICONS: Record<string, [IoniconsName, IoniconsName]> = {
-  Capture:  ['mic',           'mic-outline'],
-  Quick:    ['flash',         'flash-outline'],
-  History:  ['time',          'time-outline'],
-  Chat:     ['chatbubble',    'chatbubble-outline'],
-  Settings: ['settings',      'settings-outline'],
-};
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    CormorantGaramond_400Regular,
+    CormorantGaramond_400Regular_Italic,
+    CormorantGaramond_600SemiBold,
+  });
+
   useEffect(() => { setupNotificationHandler(); }, []);
 
+  if (!fontsLoaded) return null;
+
   return (
-    <NavigationContainer>
-      <StatusBar style="auto" />
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          tabBarActiveTintColor: '#6B4EFF',
-          tabBarInactiveTintColor: '#999',
-          headerShown: true,
-          tabBarIcon: ({ focused, color, size }) => {
-            const [active, inactive] = ICONS[route.name] ?? ['ellipse', 'ellipse-outline'];
-            return <Ionicons name={focused ? active : inactive} size={size} color={color} />;
-          },
-        })}
-      >
-        <Tab.Screen name="Capture" component={CaptureScreen} />
-        <Tab.Screen name="Quick" component={QuickAddScreen} />
-        <Tab.Screen name="History" component={HistoryScreen} />
-        <Tab.Screen name="Chat" component={ConversationScreen} />
-        <Tab.Screen name="Settings" component={SettingsScreen} />
-      </Tab.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen
+              name="History"
+              component={HistoryScreen}
+              options={{ headerShown: true, title: 'History' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerShown: true, title: 'Settings' }}
+            />
+          </Stack.Navigator>
+        </NavigationContainer>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

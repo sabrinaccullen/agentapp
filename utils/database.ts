@@ -39,6 +39,12 @@ async function getDb() {
         synced INTEGER DEFAULT 0,
         queued INTEGER DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
     `);
     // migrate existing installs that predate the queued column
     try { await db.execAsync('ALTER TABLE captures ADD COLUMN queued INTEGER DEFAULT 0'); } catch {}
@@ -123,4 +129,26 @@ export async function getQueuedCaptures(): Promise<Capture[]> {
     'SELECT * FROM captures WHERE queued = 1 ORDER BY created_at ASC'
   );
   return rows.map(rowToCapture);
+}
+
+// --- Conversation messages ---
+
+import type { Message } from './conversation';
+
+export async function getConversationMessages(): Promise<Message[]> {
+  if (Platform.OS === 'web') return [];
+  const database = await getDb();
+  const rows = await database.getAllAsync(
+    'SELECT role, content FROM conversation_messages ORDER BY created_at ASC'
+  );
+  return rows.map((r: any) => ({ role: r.role as Message['role'], content: r.content }));
+}
+
+export async function appendConversationMessage(role: Message['role'], content: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  const database = await getDb();
+  await database.runAsync(
+    'INSERT INTO conversation_messages (role, content, created_at) VALUES (?, ?, ?)',
+    [role, content, Date.now()]
+  );
 }

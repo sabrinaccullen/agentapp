@@ -20,9 +20,18 @@ export async function startRecording(): Promise<void> {
 
   await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
 
-  _recorder = new AudioModule.AudioRecorder({});
-  await _recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
-  _recorder.record();
+  const preset = RecordingPresets.HIGH_QUALITY;
+  const platformOptions = {
+    extension: preset.extension,
+    sampleRate: preset.sampleRate,
+    numberOfChannels: preset.numberOfChannels,
+    bitRate: preset.bitRate,
+    isMeteringEnabled: false,
+    ...(Platform.OS === 'ios' ? preset.ios : preset.android),
+  };
+  _recorder = new AudioModule.AudioRecorder(platformOptions);
+  await _recorder.prepareToRecordAsync();
+  await _recorder.record();
   addLog('info', 'audio', 'Recording started');
 }
 
