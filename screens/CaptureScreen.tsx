@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
   KeyboardAvoidingView, TouchableWithoutFeedback, Platform, ActivityIndicator, Keyboard,
@@ -21,12 +21,16 @@ export default function CaptureScreen() {
   const [error, setError] = useState('');
   const baseTextRef = useRef('');
   const interimRef = useRef('');
+  const isListeningRef = useRef(false);
+  useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
 
   useFocusEffect(useCallback(() => {
     return () => {
+      if (!isListeningRef.current) return;
       if (Platform.OS === 'web') stopListening();
       else stopRecording().catch(() => {});
       setIsListening(false);
+      setTab('write');
     };
   }, []));
 
