@@ -81,6 +81,23 @@ The three-mode system (task/chat/plan) and their separate system prompts are rep
 
 The global font scale caps at 19px, but the Home Screen spec explicitly approves a Display tier at 32px for the greeting ("Good morning." / "Good afternoon." / "Good evening.") — Cormorant Garamond SemiBold only. This is the emotional centrepiece of the screen and intentionally breaks the standard cap. No other element uses 32px; Review should treat this as a standing exception for `styles.greeting` in HomeScreen.tsx.
 
+## DECISION-014 — KeyboardAvoidingView needs explicit keyboardVerticalOffset inside the overlay
+2026-06-15 | `screens/OverlayPanel.tsx`
+
+`KeyboardAvoidingView`'s `behavior="padding"` was already in place but under-padded the toolbar (BUG-007). Root cause: the overlay is rendered inside a parent `Animated.View` with `transform: [{ translateY }]` (DECISION-010), and KAV's native layout measurement doesn't account for that transform — it thinks its top sits at `y=0` instead of `SCREEN_HEIGHT * 0.08` (the overlay's actual on-screen top). Fixed by passing `keyboardVerticalOffset={SCREEN_HEIGHT * 0.08}` explicitly rather than relying on KAV's auto-measurement.
+
+If the overlay's height ratio (currently 92% in `HomeScreen.tsx`) ever changes, this offset must be updated to match.
+
+## DECISION-015 — Conversation input field needs explicit lineHeight
+2026-06-15 | `screens/OverlayPanel.tsx`
+
+`styles.inputField` had no `lineHeight`, so the TextInput's line box was sized too tightly around cap height, clipping descenders ("y", "g") in the placeholder text (BUG-008). Added `lineHeight: 20` against `fontSize: 16`.
+
+## DECISION-016 — Reduce Motion must subscribe to live changes, not just read once on mount
+2026-06-15 | `screens/HomeScreen.tsx`, `screens/OverlayPanel.tsx`
+
+Both screens read `AccessibilityInfo.isReduceMotionEnabled()` once on mount but never updated if the OS setting changed while the app was already running (BUG-006) — e.g. QA toggling Reduce Motion in Settings and switching back without force-quitting. Added `AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion)` in both components' mount effects, with listener cleanup on unmount.
+
 ## DECISION-009 — Theme cross-fade uses content opacity animation, not gradient interpolation
 2026-06-14 | `screens/HomeScreen.tsx`
 

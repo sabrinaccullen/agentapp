@@ -50,6 +50,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const motionSub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
 
     getSecure(FIRST_LAUNCH_KEY).then(val => {
       if (val === null) {
@@ -61,7 +62,10 @@ export default function HomeScreen({ navigation }: Props) {
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') setGreeting(getGreeting());
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      motionSub.remove();
+    };
   }, []);
 
   const openOverlay = useCallback(() => {

@@ -73,7 +73,9 @@ export default function OverlayPanel({ onRequestClose }: Props) {
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const motionSub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
     getConversationMessages().then(setMessages);
+    return () => motionSub.remove();
   }, []);
 
   useEffect(() => {
@@ -226,6 +228,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={SCREEN_HEIGHT * 0.08}
     >
       <LinearGradient
         colors={[overlayGradient.bgStart, overlayGradient.bgEnd]}
@@ -537,6 +540,7 @@ const styles = StyleSheet.create({
   inputField: {
     flex: 1,
     fontSize: 16,
+    lineHeight: 20,
   },
   sendBtn: {
     width: 28,
