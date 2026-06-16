@@ -3,6 +3,7 @@ import {
   StyleSheet, Text, View, TextInput,
   TouchableOpacity, Alert, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { useFocusEffect } from '@react-navigation/native';
 import { saveSecure, deleteSecure } from '../utils/storage';
 import {
@@ -236,6 +237,13 @@ export default function SettingsScreen() {
         />
         <NotificationsSection />
         <LogSection />
+        <View style={styles.section}>
+          <Text style={styles.label}>About</Text>
+          <Text style={styles.buildInfo}>
+            Version {Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '—'}
+            {Constants.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -262,6 +270,7 @@ const styles = StyleSheet.create({
   savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   savedText: { color: '#4CAF50', fontSize: 14 },
   clearText: { color: '#FF4444', fontSize: 14 },
+  buildInfo: { fontSize: 13, color: '#999' },
 });
 
 const notifStyles = StyleSheet.create({

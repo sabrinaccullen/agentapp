@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Animated, FlatList, KeyboardAvoidingView, Platform,
-  Alert, Dimensions, AccessibilityInfo, ScrollView,
+  Alert, Dimensions, AccessibilityInfo, ScrollView, PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,26 @@ import { useTheme } from '../contexts/ThemeContext';
 import { sendMessage, type Message } from '../utils/conversation';
 import { saveCapture, getConversationMessages, appendConversationMessage } from '../utils/database';
 import { startRecording, stopRecording } from '../utils/audio';
+import { processAndSyncCapture } from '../utils/queue';
+
+const SWIPE_DISMISS_THRESHOLD = 50;
+
+function FallbackGlow() {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+
+  return <Animated.View pointerEvents="none" style={[styles.fallbackGlow, { opacity }]} />;
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -95,12 +115,20 @@ export default function OverlayPanel({ onRequestClose }: Props) {
   const [noteSaved, setNoteSaved] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const [isPickingTag, setIsPickingTag] = useState(false);
+  const [showFallbackGlow, setShowFallbackGlow] = useState(false);
 
   const listRef = useRef<FlatList>(null);
   const isListeningRef = useRef(false);
   const noteInputRef = useRef<TextInput>(null);
   const underlineAnim = useRef(new Animated.Value(0)).current;
   const saveFadeAnim = useRef(new Animated.Value(1)).current;
+  const glowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerFallbackGlow = useCallback(() => {
+    setShowFallbackGlow(true);
+    if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
+    glowTimerRef.current = setTimeout(() => setShowFallbackGlow(false), 1800);
+  }, []);
 
   useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
 
@@ -114,6 +142,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
   useEffect(() => {
     return () => {
       if (isListeningRef.current) stopRecording().catch(() => {});
+      if (glowTimerRef.current) clearTimeout(glowTimerRef.current);
     };
   }, []);
 
@@ -144,6 +173,18 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     onRequestClose();
   }, [mode, noteText, onRequestClose]);
 
+  const handleCloseRef = useRef(handleClose);
+  useEffect(() => { handleCloseRef.current = handleClose; }, [handleClose]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) => gesture.dy > 10 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dy >= SWIPE_DISMISS_THRESHOLD) handleCloseRef.current();
+      },
+    })
+  ).current;
+
   const startDictation = useCallback(async () => {
     setError('');
     try {
@@ -165,14 +206,16 @@ export default function OverlayPanel({ onRequestClose }: Props) {
         const transcribed: string = await transcribeAudio(uri);
         if (transcribed.trim()) {
           setNoteText(prev => prev ? prev + '\n' + transcribed.trim() : transcribed.trim());
+        } else {
+          triggerFallbackGlow();
         }
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch {
+      triggerFallbackGlow();
     } finally {
       setIsTranscribing(false);
     }
-  }, []);
+  }, [triggerFallbackGlow]);
 
   const handleDictationToggle = useCallback(() => {
     if (isListening) stopDictation();
@@ -182,7 +225,8 @@ export default function OverlayPanel({ onRequestClose }: Props) {
   const commitNoteSave = useCallback(async (tag: string | null) => {
     if (!noteText.trim()) return;
     try {
-      await saveCapture(noteText.trim(), 'note', tag);
+      const capture = await saveCapture(noteText.trim(), 'note', tag);
+      processAndSyncCapture(capture).catch(() => {});
       setIsPickingTag(false);
       Animated.sequence([
         Animated.timing(saveFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
@@ -241,9 +285,10 @@ export default function OverlayPanel({ onRequestClose }: Props) {
           const { transcribeAudio } = require('../utils/transcribe');
           const transcribed: string = await transcribeAudio(uri);
           if (transcribed.trim()) await handleSend(transcribed.trim());
+          else triggerFallbackGlow();
         }
-      } catch (e: any) {
-        setError(e.message);
+      } catch {
+        triggerFallbackGlow();
       } finally {
         setIsTranscribing(false);
       }
@@ -256,7 +301,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     } catch (e: any) {
       setError(e.message);
     }
-  }, [isListening, handleSend]);
+  }, [isListening, handleSend, triggerFallbackGlow]);
 
   const c = theme.colors;
   const overlayGradient = OVERLAY_COLORS[theme.name] ?? OVERLAY_COLORS['Golden Hour'];
@@ -278,7 +323,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={styles.header}>
+      <View style={styles.header} {...panResponder.panHandlers}>
         <View style={styles.modeToggle}>
           <View style={styles.modeItem}>
             <TouchableOpacity onPress={() => switchMode('note')}>
@@ -328,6 +373,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
                 {noteText.length}
               </Text>
             )}
+            {showFallbackGlow && <FallbackGlow />}
           </View>
 
           {error ? (
@@ -366,7 +412,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
                 <TouchableOpacity style={styles.dictateBtn} onPress={handleDictationToggle}>
                   <Waveform size={20} color={isListening ? c.textPrimary : c.textMuted} weight="regular" />
                   <Text style={[styles.toolbarLabel, { color: isListening ? c.textPrimary : c.textMuted }]}>
-                    {isTranscribing ? 'Processing…' : isListening ? 'Listening' : 'Speak'}
+                    {isTranscribing ? 'Processing…' : isListening ? 'Tap to stop' : 'Speak'}
                   </Text>
                   {isListening && <View style={[styles.listeningDot, { backgroundColor: c.textPrimary }]} />}
                 </TouchableOpacity>
@@ -431,6 +477,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
           ) : null}
 
           <View style={[styles.inputRow, { borderTopColor: c.separator, paddingBottom: insets.bottom || 16 }]}>
+            {showFallbackGlow && <FallbackGlow />}
             <View style={[styles.inputPill, { backgroundColor: c.entryFill }]}>
               <TextInput
                 style={[styles.inputField, { color: c.textPrimary }]}
@@ -470,6 +517,17 @@ export default function OverlayPanel({ onRequestClose }: Props) {
 }
 
 const styles = StyleSheet.create({
+  fallbackGlow: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 220,
+    height: 220,
+    marginLeft: -110,
+    marginTop: -110,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
   root: {
     flex: 1,
     borderTopLeftRadius: 24,

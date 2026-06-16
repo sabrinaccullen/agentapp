@@ -1,43 +1,27 @@
 import { Platform } from 'react-native';
-import { getQueuedCaptures, setQueued } from './database';
+import { Capture, setSyncStatus, setProcessingStatus } from './database';
 import { getSecure } from './storage';
-import { appendProcessedToQueue } from './vault';
+import { appendToQueue, appendProcessedToQueue } from './vault';
 import { addLog } from './log';
 
-export interface ProcessedCapture {
-  id: string;
+interface ProcessedEntry {
   original: string;
   cleaned: string;
   actions: string[];
   tags: string[];
 }
 
-export interface ProcessQueueResult {
-  captures: ProcessedCapture[];
-  vaultError?: string;
-}
-
-export async function processQueue(): Promise<ProcessQueueResult> {
-  if (Platform.OS === 'web') {
-    throw new Error('Queue processing requires the mobile app — browser security blocks direct API calls.');
-  }
-
-  const apiKey = await getSecure('claude_api_key');
-  if (!apiKey) throw new Error('Claude API key not set — add it in Settings.');
-
-  const queued = await getQueuedCaptures();
-  if (queued.length === 0) throw new Error('No captures in queue.');
-
-  const prompt = `You are processing a batch of captured notes from a personal knowledge app. For each note, return:
+async function cleanupCapture(capture: Capture, apiKey: string): Promise<ProcessedEntry> {
+  const prompt = `You are processing a captured note from a personal knowledge app. Return:
 1. A cleaned-up version (fix grammar, remove filler words, keep meaning intact)
 2. Action items extracted (empty array if none)
 3. Suggested tags (2-4 short lowercase tags)
 
-Notes:
-${queued.map((c, i) => `[${i + 1}] id:${c.id}\n${c.text}`).join('\n\n')}
+Note:
+${capture.text}
 
-Respond with a JSON array only, no other text:
-[{"id":"...","cleaned":"...","actions":["..."],"tags":["..."]}]`;
+Respond with a JSON object only, no other text:
+{"cleaned":"...","actions":["..."],"tags":["..."]}`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -48,7 +32,7 @@ Respond with a JSON array only, no other text:
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -61,23 +45,49 @@ Respond with a JSON array only, no other text:
   const data = await response.json();
   const raw = data.content[0].text.trim();
   const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  const results: ProcessedCapture[] = JSON.parse(text).map((r: any, i: number) => ({
-    ...r,
-    original: queued[i]?.text ?? '',
-    actions: r.actions ?? [],
-    tags: r.tags ?? [],
-  }));
+  const result = JSON.parse(text);
+  return {
+    original: capture.text,
+    cleaned: result.cleaned,
+    actions: result.actions ?? [],
+    tags: result.tags ?? [],
+  };
+}
 
-  await Promise.all(queued.map(c => setQueued(c.id, false)));
-  addLog('info', 'queue', `Processed ${results.length} capture(s) with Claude`);
+/**
+ * Runs immediately after a note is saved: attempts Claude cleanup/tagging,
+ * then syncs the resulting (processed or raw fallback) entry to the vault.
+ * Replaces the old manual Queue/Process-with-Claude flow removed by the
+ * History Screen renovation (HANDOFF-023) — every note processes itself once.
+ */
+export async function processAndSyncCapture(capture: Capture): Promise<void> {
+  if (Platform.OS === 'web') return;
 
-  let vaultError: string | undefined;
-  try {
-    await appendProcessedToQueue(results);
-  } catch (e: any) {
-    vaultError = e.message;
-    addLog('error', 'queue', `Vault sync failed: ${e.message}`);
+  await setProcessingStatus(capture.id, 'processing');
+  await setSyncStatus(capture.id, 'pending');
+
+  let entry: ProcessedEntry | null = null;
+  const apiKey = await getSecure('claude_api_key');
+
+  if (apiKey) {
+    try {
+      entry = await cleanupCapture(capture, apiKey);
+      await setProcessingStatus(capture.id, 'processed');
+      addLog('info', 'queue', `Processed capture ${capture.id} with Claude`);
+    } catch (e: any) {
+      await setProcessingStatus(capture.id, 'failed');
+      addLog('error', 'queue', `Processing failed for ${capture.id}: ${e.message}`);
+    }
+  } else {
+    await setProcessingStatus(capture.id, 'failed');
   }
 
-  return { captures: results, vaultError };
+  try {
+    if (entry) await appendProcessedToQueue([entry]);
+    else await appendToQueue(capture.text, capture.type);
+    await setSyncStatus(capture.id, 'synced');
+  } catch (e: any) {
+    await setSyncStatus(capture.id, 'failed');
+    addLog('error', 'vault', `Sync failed for ${capture.id}: ${e.message}`);
+  }
 }

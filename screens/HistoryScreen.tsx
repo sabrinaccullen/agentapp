@@ -1,193 +1,367 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  StyleSheet, Text, View, FlatList,
-  TouchableOpacity, ScrollView, ActivityIndicator,
+  StyleSheet, Text, View, ScrollView, TouchableOpacity,
+  TextInput, Animated, LayoutAnimation, UIManager, Platform,
+  AccessibilityInfo, Dimensions, StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { getAllCaptures, deleteCapture, setQueued, Capture } from '../utils/database';
-import { processQueue, ProcessedCapture, ProcessQueueResult } from '../utils/queue';
-import { appendToQueue } from '../utils/vault';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  CaretLeft, MagnifyingGlass, X, CloudCheck, CloudArrowUp, CloudSlash,
+  PencilSimpleLine,
+} from 'phosphor-react-native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { getAllCaptures, deleteCapture, Capture } from '../utils/database';
+import { processAndSyncCapture } from '../utils/queue';
+import { useTheme } from '../contexts/ThemeContext';
+import type { RootStackParamList } from './HomeScreen';
+import OverlayPanel from './OverlayPanel';
 
-export default function HistoryScreen() {
+if (Platform.OS === 'android') {
+  UIManager.setLayoutAnimationEnabledExperimental?.(true);
+}
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const OVERLAY_HEIGHT = SCREEN_HEIGHT * 0.92;
+const SEARCH_DEBOUNCE_MS = 200;
+
+type HistoryNavigationProp = NativeStackNavigationProp<RootStackParamList, 'History'>;
+
+interface Props {
+  navigation: HistoryNavigationProp;
+}
+
+function timeLabel(ts: number): string {
+  return new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+const QUEUE_LABEL: Record<Capture['processingStatus'], string> = {
+  processing: 'Processing',
+  processed: 'Processed',
+  failed: 'Failed',
+};
+
+function CloudIcon({ status, color }: { status: Capture['syncStatus']; color: { synced: string; pending: string; failed: string } }) {
+  if (status === 'synced') return <CloudCheck size={16} color={color.synced} weight="fill" />;
+  if (status === 'failed') return <CloudSlash size={16} color={color.failed} weight="regular" />;
+  return <CloudArrowUp size={16} color={color.pending} weight="regular" />;
+}
+
+export default function HistoryScreen({ navigation }: Props) {
+  const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const c = theme.colors;
+
   const [captures, setCaptures] = useState<Capture[]>([]);
-  const [error, setError] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [results, setResults] = useState<ProcessQueueResult | null>(null);
-  const [vaultStatus, setVaultStatus] = useState<Record<string, string>>({});
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+
+  const dimAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(OVERLAY_HEIGHT)).current;
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
-    getAllCaptures()
-      .then(setCaptures)
-      .catch(e => setError(String(e)));
+    getAllCaptures().then(setCaptures).catch(() => {});
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const queued = captures.filter(c => c.queued);
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => sub.remove();
+  }, []);
 
-  const handleToggleQueue = async (item: Capture) => {
-    await setQueued(item.id, !item.queued);
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setSearchQuery(searchInput), SEARCH_DEBOUNCE_MS);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+  }, [searchInput]);
+
+  const animateLayout = useCallback(() => {
+    if (!reduceMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, [reduceMotion]);
+
+  const toggleSearch = useCallback(() => {
+    animateLayout();
+    if (searchVisible) {
+      setSearchVisible(false);
+      setSearchInput('');
+      setSearchQuery('');
+    } else {
+      setSearchVisible(true);
+    }
+  }, [searchVisible, animateLayout]);
+
+  const toggleExpand = useCallback((id: string) => {
+    animateLayout();
+    setDeleteConfirmId(null);
+    setExpandedId(prev => (prev === id ? null : id));
+  }, [animateLayout]);
+
+  const handleDeleteConfirm = useCallback(async (id: string) => {
+    animateLayout();
+    await deleteCapture(id);
+    setDeleteConfirmId(null);
+    setExpandedId(null);
     load();
-  };
+  }, [animateLayout, load]);
 
-  const handleSendToVault = async (item: Capture) => {
-    setVaultStatus(s => ({ ...s, [item.id]: 'sending…' }));
-    try {
-      await appendToQueue(item.text, item.type);
-      setVaultStatus(s => ({ ...s, [item.id]: '✓ sent' }));
-    } catch (e: any) {
-      setVaultStatus(s => ({ ...s, [item.id]: `✗ ${e.message}` }));
+  const handleRetrySync = useCallback(async (item: Capture) => {
+    setRetryingId(item.id);
+    await processAndSyncCapture(item);
+    setRetryingId(null);
+    load();
+  }, [load]);
+
+  const openOverlay = useCallback(() => {
+    setOverlayOpen(true);
+    if (reduceMotion) {
+      dimAnim.setValue(0.4);
+      slideAnim.setValue(0);
+      return;
     }
-  };
+    Animated.parallel([
+      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 80, stiffness: 400, mass: 1 }),
+      Animated.timing(dimAnim, { toValue: 0.4, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, [reduceMotion, slideAnim, dimAnim]);
 
-  const handleProcess = async () => {
-    setProcessing(true);
-    setError('');
-    setResults(null);
-    try {
-      const out = await processQueue();
-      setResults(out);
-      if (out.vaultError) setError(`Vault sync failed: ${out.vaultError}`);
+  const closeOverlay = useCallback(() => {
+    if (reduceMotion) {
+      dimAnim.setValue(0);
+      slideAnim.setValue(OVERLAY_HEIGHT);
+      setOverlayOpen(false);
       load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setProcessing(false);
+      return;
     }
-  };
+    Animated.parallel([
+      Animated.timing(slideAnim, { toValue: OVERLAY_HEIGHT, duration: 280, useNativeDriver: true }),
+      Animated.timing(dimAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+    ]).start(() => { setOverlayOpen(false); load(); });
+  }, [reduceMotion, slideAnim, dimAnim, load]);
 
-  if (results) {
-    return (
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.resultsHeader}>Queue processed — {results.captures.length} note{results.captures.length !== 1 ? 's' : ''}</Text>
-        {results.vaultError && <Text style={styles.errorText}>⚠ Vault sync failed: {results.vaultError}</Text>}
-        {results.captures.map(r => (
-          <View key={r.id} style={styles.resultCard}>
-            <Text style={styles.resultLabel}>Original</Text>
-            <Text style={styles.resultOriginal}>{r.original}</Text>
-            <Text style={styles.resultLabel}>Cleaned</Text>
-            <Text style={styles.resultCleaned}>{r.cleaned}</Text>
-            {r.actions.length > 0 && (
-              <>
-                <Text style={styles.resultLabel}>Actions</Text>
-                {r.actions.map((a, i) => <Text key={i} style={styles.resultItem}>• {a}</Text>)}
-              </>
-            )}
-            {r.tags.length > 0 && (
-              <View style={styles.tagRow}>
-                {r.tags.map(t => (
-                  <View key={t} style={styles.tag}><Text style={styles.tagText}>#{t}</Text></View>
-                ))}
-              </View>
-            )}
-          </View>
-        ))}
-        <TouchableOpacity style={styles.btn} onPress={() => setResults(null)}>
-          <Text style={styles.btnText}>Back to History</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    );
-  }
+  const query = searchQuery.trim().toLowerCase();
+  const notes = captures.filter(item => !query || item.text.toLowerCase().includes(query));
+  const showNoResults = query.length > 0 && notes.length === 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      {/* Queue banner */}
-      {queued.length > 0 && (
-        <View style={styles.queueBanner}>
-          <Text style={styles.queueCount}>{queued.length} in queue</Text>
-          {processing
-            ? <ActivityIndicator color="#fff" />
-            : (
-              <TouchableOpacity style={styles.processBtn} onPress={handleProcess}>
-                <Text style={styles.processBtnText}>Process with Claude</Text>
+    <View style={styles.root}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <LinearGradient colors={[c.bgStart, c.bgEnd]} style={StyleSheet.absoluteFill} />
+
+      <View style={[styles.topBar, { marginTop: insets.top + 20 }]}>
+        <TouchableOpacity style={styles.backArea} onPress={() => navigation.goBack()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <CaretLeft size={20} color={c.textPrimary} weight="regular" />
+          <Text style={[styles.topBarLabel, { color: c.textPrimary }]}>History</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={toggleSearch} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          {searchVisible ? (
+            <Text style={[styles.doneLabel, { color: c.textPrimary }]}>Done</Text>
+          ) : (
+            <MagnifyingGlass size={20} color={c.textPrimary} weight="regular" />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {searchVisible && (
+        <View style={[styles.searchBarWrap, { marginTop: 12 }]}>
+          <View style={[styles.searchBar, { backgroundColor: c.entryFill }]}>
+            <MagnifyingGlass size={16} color={c.textMuted} weight="regular" />
+            <TextInput
+              style={[styles.searchInput, { color: c.textPrimary }]}
+              placeholder="Search…"
+              placeholderTextColor={c.textMuted}
+              value={searchInput}
+              onChangeText={setSearchInput}
+              autoFocus
+            />
+            {searchInput.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchInput('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={16} color={c.textMuted} weight="regular" />
               </TouchableOpacity>
-            )
-          }
+            )}
+          </View>
         </View>
       )}
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {showNoResults ? (
+          <Text style={[styles.noResults, { color: c.textMuted }]}>No results.</Text>
+        ) : (
+          <>
+            <Text style={[styles.sectionHeader, { color: c.textMuted }]}>Notes</Text>
+            {notes.length === 0 ? (
+              <Text style={[styles.emptyText, { color: c.textMuted }]}>
+                {query ? 'No notes match your search.' : 'No notes yet.'}
+              </Text>
+            ) : (
+              notes.map(item => {
+                const expanded = expandedId === item.id;
+                const confirming = deleteConfirmId === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.9}
+                    onPress={() => toggleExpand(item.id)}
+                    style={[
+                      styles.card,
+                      { backgroundColor: expanded ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.07)' },
+                    ]}
+                  >
+                    <View style={styles.cardTopRow}>
+                      <Text
+                        style={[styles.cardText, { color: c.textPrimary }]}
+                        numberOfLines={expanded ? undefined : 2}
+                      >
+                        {item.text}
+                      </Text>
+                      <View style={styles.cloudIconSlot}>
+                        <CloudIcon
+                          status={item.syncStatus}
+                          color={{ synced: '#4ADE80', pending: `${c.textPrimary}66`, failed: `${c.textPrimary}B3` }}
+                        />
+                      </View>
+                    </View>
+                    <Text style={[styles.timestamp, { color: c.textMuted }]}>{timeLabel(item.createdAt)}</Text>
 
-      {captures.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.empty}>No captures yet.</Text>
-          <TouchableOpacity style={styles.btn} onPress={load}>
-            <Text style={styles.btnText}>Refresh</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={captures}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={[styles.card, item.queued && styles.cardQueued]}>
-              <Text style={styles.cardText}>{item.text}</Text>
-              <View style={styles.row}>
-                <Text style={styles.date}>{new Date(item.createdAt).toLocaleString()}</Text>
-                <View style={styles.actions}>
-                  <TouchableOpacity onPress={() => handleSendToVault(item)}>
-                    <Text style={styles.vaultText}>
-                      {vaultStatus[item.id] ?? 'Vault'}
-                    </Text>
+                    {expanded && (
+                      <View style={[styles.expandedSection, { borderTopColor: c.separator }]}>
+                        {confirming ? (
+                          <View style={styles.confirmRow}>
+                            <Text style={[styles.confirmText, { color: c.textPrimary }]}>Delete this note?</Text>
+                            <View style={styles.confirmActions}>
+                              <TouchableOpacity onPress={() => setDeleteConfirmId(null)}>
+                                <Text style={[styles.cancelLabel, { color: c.textMuted }]}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleDeleteConfirm(item.id)}>
+                                <Text style={styles.deleteLabel}>Delete</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.expandedRow}>
+                            <View style={styles.queueStateRow}>
+                              <View style={[styles.queueDot, { backgroundColor: c.textMuted }]} />
+                              <Text style={[styles.queueLabel, { color: c.textMuted }]}>
+                                {retryingId === item.id ? 'Processing' : QUEUE_LABEL[item.processingStatus]}
+                              </Text>
+                            </View>
+                            <View style={styles.expandedActions}>
+                              {item.syncStatus === 'failed' && (
+                                <TouchableOpacity onPress={() => handleRetrySync(item)}>
+                                  <Text style={[styles.retryLabel, { color: theme.colors.textPrimary }]}>Retry sync</Text>
+                                </TouchableOpacity>
+                              )}
+                              <TouchableOpacity onPress={() => setDeleteConfirmId(item.id)}>
+                                <Text style={styles.deleteLabel}>Delete</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleToggleQueue(item)} style={styles.queueToggle}>
-                    <Text style={[styles.queueToggleText, item.queued && styles.queueToggleActive]}>
-                      {item.queued ? 'Queued ✓' : 'Queue'}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={async () => { await deleteCapture(item.id); load(); }}>
-                    <Text style={styles.deleteText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-          contentContainerStyle={{ padding: 16 }}
-        />
+                );
+              })
+            )}
+          </>
+        )}
+      </ScrollView>
+
+      <TouchableOpacity
+        style={[styles.composeBtn, { bottom: insets.bottom + 16, backgroundColor: 'rgba(255,255,255,0.10)', borderColor: 'rgba(255,255,255,0.12)' }]}
+        onPress={openOverlay}
+        activeOpacity={0.85}
+      >
+        <PencilSimpleLine size={20} color={c.textPrimary} weight="regular" />
+      </TouchableOpacity>
+
+      {overlayOpen && (
+        <Animated.View style={[styles.dim, { opacity: dimAnim }]} pointerEvents="box-none">
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeOverlay} activeOpacity={1} />
+        </Animated.View>
+      )}
+
+      {overlayOpen && (
+        <Animated.View style={[styles.overlayContainer, { transform: [{ translateY: slideAnim }] }]}>
+          <OverlayPanel onRequestClose={closeOverlay} />
+        </Animated.View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  container: { padding: 16, backgroundColor: '#fff' },
-  empty: { fontSize: 16, color: '#999', marginBottom: 16 },
-  btn: { backgroundColor: '#6B4EFF', borderRadius: 8, paddingHorizontal: 20, paddingVertical: 10 },
-  btnText: { color: '#fff', fontWeight: '600' },
-  queueBanner: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#6B4EFF', paddingHorizontal: 16, paddingVertical: 12,
+  root: { flex: 1 },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  queueCount: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  processBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 },
-  processBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  errorText: { color: '#E53935', padding: 12, textAlign: 'center', fontSize: 13 },
+  backArea: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  topBarLabel: { fontSize: 17, fontWeight: '600' },
+  doneLabel: { fontSize: 17, fontWeight: '400' },
+  searchBarWrap: { paddingHorizontal: 20 },
+  searchBar: {
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  searchInput: { flex: 1, fontSize: 16 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 },
+  sectionHeader: { fontSize: 13, fontWeight: '600', marginBottom: 8, opacity: 0.55 },
+  emptyText: { fontSize: 16, textAlign: 'center', opacity: 0.45, paddingVertical: 24 },
+  noResults: { fontSize: 14, textAlign: 'center', opacity: 0.4, paddingTop: 24 },
   card: {
-    backgroundColor: '#F9F9F9', borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#eee', marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
   },
-  cardQueued: { borderColor: '#6B4EFF', backgroundColor: '#F5F3FF' },
-  cardText: { fontSize: 15, color: '#333', marginBottom: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  date: { fontSize: 12, color: '#999', flex: 1 },
-  actions: { flexDirection: 'row', gap: 12 },
-  queueToggle: { paddingHorizontal: 4 },
-  vaultText: { color: '#2196F3', fontSize: 12, fontWeight: '600' },
-  queueToggleText: { color: '#6B4EFF', fontSize: 12, fontWeight: '600' },
-  queueToggleActive: { color: '#4CAF50' },
-  deleteText: { color: '#E53935', fontSize: 12 },
-  // results view
-  resultsHeader: { fontSize: 17, fontWeight: '700', color: '#333', marginBottom: 16 },
-  resultCard: {
-    backgroundColor: '#F9F9F9', borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#eee', marginBottom: 16,
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  cardText: { fontSize: 16, opacity: 0.9, flex: 1 },
+  cloudIconSlot: { marginTop: 2 },
+  timestamp: { fontSize: 13, opacity: 0.45, marginTop: 6 },
+  expandedSection: { marginTop: 10, paddingTop: 10, borderTopWidth: 1 },
+  expandedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  queueStateRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  queueDot: { width: 6, height: 6, borderRadius: 3 },
+  queueLabel: { fontSize: 13, opacity: 0.6 },
+  expandedActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  retryLabel: { fontSize: 13, fontWeight: '500' },
+  deleteLabel: { fontSize: 13, fontWeight: '500', color: '#EF4444' },
+  confirmRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  confirmText: { fontSize: 14, opacity: 0.9 },
+  confirmActions: { flexDirection: 'row', gap: 16 },
+  cancelLabel: { fontSize: 13, fontWeight: '500' },
+  composeBtn: {
+    position: 'absolute',
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  resultLabel: { fontSize: 11, fontWeight: '700', color: '#9B8AFF', textTransform: 'uppercase', marginBottom: 4, marginTop: 8 },
-  resultOriginal: { fontSize: 13, color: '#999', fontStyle: 'italic' },
-  resultCleaned: { fontSize: 15, color: '#333', lineHeight: 22 },
-  resultItem: { fontSize: 14, color: '#333', marginBottom: 2 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  tag: { backgroundColor: '#EEE9FF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  tagText: { color: '#6B4EFF', fontSize: 12, fontWeight: '600' },
+  dim: { ...StyleSheet.absoluteFill, backgroundColor: '#000' },
+  overlayContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: OVERLAY_HEIGHT,
+  },
 });

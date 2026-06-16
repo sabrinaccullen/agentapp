@@ -111,3 +111,25 @@ Both screens read `AccessibilityInfo.isReduceMotionEnabled()` once on mount but 
 2026-06-14 | `screens/HomeScreen.tsx`
 
 On theme cycle, the entire `Animated.View` wrapping screen content fades to near-zero opacity (200ms), theme state updates (gradient colors snap), then fades back to full (200ms) — total 400ms matching the spec. True gradient interpolation between two `LinearGradient` instances was considered but avoided: it requires maintaining a "previous theme" ref and two gradient instances rendered simultaneously, adding complexity for a marginal visual difference. Reduce Motion uses an instant swap with no animation.
+
+## DECISION-018 — Sync/processing status auto-triggered per-note on save, queue concept removed
+2026-06-15 | `utils/database.ts`, `utils/queue.ts`, `screens/OverlayPanel.tsx`
+
+Per HANDOFF-027's resolution, `captures` gets two new tri-state columns: `sync_status` (`pending`/`synced`/`failed`) and `processing_status` (`processing`/`processed`/`failed`), both defaulting to their in-flight state on insert. The old manual flow (Queue toggle → "Process with Claude" batch button → separate "Vault" button) is fully removed — nothing in the new History Screen UI exposes it, and the spec doesn't reintroduce it.
+
+Discovered mid-implementation: `OverlayPanel.tsx`'s `saveCapture` call never invoked `appendToQueue`/`processQueue` — those were only wired to the old per-card buttons being removed. Confirmed with Sabrina: replaced the batch `processQueue()` (operated on all queued captures in one Claude call) with `processAndSyncCapture(capture)` in `queue.ts`, called fire-and-forget immediately after `saveCapture` succeeds in `commitNoteSave`. It attempts a single-note Claude cleanup call (`processing_status`), then writes either the cleaned result (`appendProcessedToQueue`) or the raw text as a fallback (`appendToQueue`) to the vault (`sync_status`). `getQueuedCaptures`, `setQueued`, `processQueue`, and `ProcessQueueResult` were deleted as dead code. The `queued` SQLite column is left in place (unused) rather than dropped — not worth the migration risk for an inert column.
+
+## DECISION-019 — Retry sync re-runs the full process+sync pipeline
+2026-06-15 | `screens/HistoryScreen.tsx`
+
+The spec's "Retry sync" only describes retrying the vault write, but the app never persists Claude's cleaned text/actions/tags separately from the raw note — only the raw `text` column exists. Retrying just the vault write would mean re-sending stale raw text even if processing had succeeded. Simplest correct option: "Retry sync" calls `processAndSyncCapture` again from scratch (re-attempts Claude cleanup, then vault sync), rather than introducing new columns to cache the processed result for retry purposes.
+
+## DECISION-020 — Overlay swipe-to-dismiss implemented as a header PanResponder, no live drag visual
+2026-06-15 | `screens/OverlayPanel.tsx`
+
+The backlog item asked for a downward swipe (≥50px) to dismiss the overlay, attributed to both `OverlayPanel.tsx` and `HomeScreen.tsx`. Implemented entirely inside `OverlayPanel.tsx`: a `PanResponder` on the header view (mode toggle + close button row) calls the existing `handleClose()` on release if `dy >= 50`, reusing its discard-confirmation logic for unsaved notes. No live translateY tracking during the drag (the overlay doesn't visually follow your finger) — `HomeScreen.tsx`/`HistoryScreen.tsx` own the slide animation value, and threading drag deltas back up to them for a marginal visual improvement wasn't worth the added coupling. Attaching the responder to the header rather than the whole panel avoids fighting the FlatList's vertical scroll in Vesper mode.
+
+## DECISION-021 — Dictation fallback glow is scoped to transcription outcomes only
+2026-06-15 | `screens/OverlayPanel.tsx`
+
+The backlog item ("Overlay dictation fallback glow") replaces inline error text with a pulsing white-12%-opacity glow specifically when transcription fails or returns empty — not for all overlay errors. `startDictation`'s mic-permission failures, `commitNoteSave`'s save failures, and `handleSend`'s Claude API errors still use the existing inline error text; only `stopDictation`'s and the conversation-mode dictation handler's catch/empty-result paths trigger the glow (`triggerFallbackGlow`, auto-hides after 1.8s). The toolbar label during active recording also changed from "Listening" to "Tap to stop" per the same backlog item, independent of the glow.
