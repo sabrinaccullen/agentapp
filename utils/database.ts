@@ -7,6 +7,7 @@ export interface Capture {
   type: 'note' | 'quick-add';
   synced: boolean;
   queued: boolean;
+  tag: string | null;
 }
 
 // --- Web fallback (localStorage) ---
@@ -37,7 +38,8 @@ async function getDb() {
         created_at INTEGER NOT NULL,
         type TEXT NOT NULL,
         synced INTEGER DEFAULT 0,
-        queued INTEGER DEFAULT 0
+        queued INTEGER DEFAULT 0,
+        tag TEXT
       );
       CREATE TABLE IF NOT EXISTS conversation_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,8 +48,9 @@ async function getDb() {
         created_at INTEGER NOT NULL
       );
     `);
-    // migrate existing installs that predate the queued column
+    // migrate existing installs that predate the queued/tag columns
     try { await db.execAsync('ALTER TABLE captures ADD COLUMN queued INTEGER DEFAULT 0'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN tag TEXT'); } catch {}
   }
   return db;
 }
@@ -60,6 +63,7 @@ function rowToCapture(row: any): Capture {
     type: row.type as 'note' | 'quick-add',
     synced: Boolean(row.synced),
     queued: Boolean(row.queued),
+    tag: row.tag ?? null,
   };
 }
 
@@ -67,7 +71,8 @@ function rowToCapture(row: any): Capture {
 
 export async function saveCapture(
   text: string,
-  type: 'note' | 'quick-add' = 'note'
+  type: 'note' | 'quick-add' = 'note',
+  tag: string | null = null
 ): Promise<Capture> {
   const capture: Capture = {
     id: Date.now().toString(),
@@ -76,6 +81,7 @@ export async function saveCapture(
     type,
     synced: false,
     queued: false,
+    tag,
   };
 
   if (Platform.OS === 'web') {
@@ -87,15 +93,15 @@ export async function saveCapture(
 
   const database = await getDb();
   await database.runAsync(
-    'INSERT INTO captures (id, text, created_at, type, synced, queued) VALUES (?, ?, ?, ?, ?, ?)',
-    [capture.id, capture.text, capture.createdAt, capture.type, 0, 0]
+    'INSERT INTO captures (id, text, created_at, type, synced, queued, tag) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [capture.id, capture.text, capture.createdAt, capture.type, 0, 0, capture.tag]
   );
   return capture;
 }
 
 export async function getAllCaptures(): Promise<Capture[]> {
   if (Platform.OS === 'web') {
-    return webGetAll().map(c => ({ ...c, queued: c.queued ?? false }));
+    return webGetAll().map(c => ({ ...c, queued: c.queued ?? false, tag: c.tag ?? null }));
   }
   const database = await getDb();
   const rows = await database.getAllAsync('SELECT * FROM captures ORDER BY created_at DESC');

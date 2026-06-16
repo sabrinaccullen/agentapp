@@ -81,6 +81,15 @@ The three-mode system (task/chat/plan) and their separate system prompts are rep
 
 The global font scale caps at 19px, but the Home Screen spec explicitly approves a Display tier at 32px for the greeting ("Good morning." / "Good afternoon." / "Good evening.") — Cormorant Garamond SemiBold only. This is the emotional centrepiece of the screen and intentionally breaks the standard cap. No other element uses 32px; Review should treat this as a standing exception for `styles.greeting` in HomeScreen.tsx.
 
+## DECISION-017 — Note tag picker reuses the toolbar container; tag stored as nullable string column
+2026-06-15 | `screens/OverlayPanel.tsx`, `utils/database.ts`
+
+Per the Note Tags addendum (`spec-overlay-2026-06-14.md`, HANDOFF-024): tapping Save in Note mode no longer saves immediately — it sets `isPickingTag` and swaps the existing toolbar's children (Speak + Save) for a horizontally-scrollable row of tag pills (Personal/Work/Idea/Reminder/Skip), per spec's instruction to reuse the toolbar container rather than introduce a new component tree. Selecting a pill or Skip calls `commitNoteSave(tag)` — the renamed/extended version of the old `handleNoteSave`, now taking the tag and running the same checkmark-then-dismiss animation as before.
+
+Cancel-on-tap-back-into-text-area is implemented by blurring `noteInputRef` when entering picker mode (`handleSavePress`) and resetting `isPickingTag` on the TextInput's `onFocus` — refocusing the input is the detectable signal for "tapped back into the text area."
+
+`captures` table gets a new nullable `tag TEXT` column (migrated via `ALTER TABLE` for existing installs, same pattern as the `queued` column in DECISION-? / original schema). `saveCapture` takes an optional third `tag` param, defaulting to `null`. No tag management UI was built — v1 ships with the hardcoded list per spec, out of scope until the Settings screen is specced.
+
 ## DECISION-014 — KeyboardAvoidingView needs explicit keyboardVerticalOffset inside the overlay
 2026-06-15 | `screens/OverlayPanel.tsx`
 

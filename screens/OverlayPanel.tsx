@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Animated, FlatList, KeyboardAvoidingView, Platform,
-  Alert, Dimensions, AccessibilityInfo,
+  Alert, Dimensions, AccessibilityInfo, ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +45,38 @@ function LoadingDot({ delay, color }: LoadingDotProps) {
   );
 }
 
+const NOTE_TAGS = ['Personal', 'Work', 'Idea', 'Reminder'];
+
+interface TagPillProps {
+  label: string;
+  muted?: boolean;
+  fillColor: string;
+  fillPressedColor: string;
+  textColor: string;
+  onPress: () => void;
+}
+
+function TagPill({ label, muted, fillColor, fillPressedColor, textColor, onPress }: TagPillProps) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <TouchableOpacity
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      onPress={onPress}
+      style={[styles.tagPill, { backgroundColor: pressed ? fillPressedColor : fillColor }]}
+    >
+      <Text
+        style={[
+          styles.tagPillText,
+          { color: textColor, opacity: muted ? 0.6 : 0.9, fontWeight: muted ? '400' : '500' },
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 interface Props {
   onRequestClose: () => void;
 }
@@ -62,6 +94,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [isPickingTag, setIsPickingTag] = useState(false);
 
   const listRef = useRef<FlatList>(null);
   const isListeningRef = useRef(false);
@@ -146,10 +179,11 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     else startDictation();
   }, [isListening, startDictation, stopDictation]);
 
-  const handleNoteSave = useCallback(async () => {
+  const commitNoteSave = useCallback(async (tag: string | null) => {
     if (!noteText.trim()) return;
     try {
-      await saveCapture(noteText.trim(), 'note');
+      await saveCapture(noteText.trim(), 'note', tag);
+      setIsPickingTag(false);
       Animated.sequence([
         Animated.timing(saveFadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
         Animated.timing(saveFadeAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
@@ -164,6 +198,15 @@ export default function OverlayPanel({ onRequestClose }: Props) {
       setError(e.message);
     }
   }, [noteText, saveFadeAnim, onRequestClose]);
+
+  const handleSavePress = useCallback(() => {
+    setIsPickingTag(true);
+    noteInputRef.current?.blur();
+  }, []);
+
+  const handleNoteInputFocus = useCallback(() => {
+    if (isPickingTag) setIsPickingTag(false);
+  }, [isPickingTag]);
 
   const handleSend = useCallback(async (text?: string) => {
     const content = (text ?? inputText).trim();
@@ -275,6 +318,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
               placeholderTextColor={`${c.textPrimary}66`}
               value={noteText}
               onChangeText={setNoteText}
+              onFocus={handleNoteInputFocus}
               multiline
               textAlignVertical="top"
               autoFocus
@@ -291,33 +335,63 @@ export default function OverlayPanel({ onRequestClose }: Props) {
           ) : null}
 
           <View style={[styles.toolbar, { borderTopColor: c.separator, paddingBottom: insets.bottom || 16 }]}>
-            <TouchableOpacity style={styles.dictateBtn} onPress={handleDictationToggle}>
-              <Waveform size={20} color={isListening ? c.textPrimary : c.textMuted} weight="regular" />
-              <Text style={[styles.toolbarLabel, { color: isListening ? c.textPrimary : c.textMuted }]}>
-                {isTranscribing ? 'Processing…' : isListening ? 'Listening' : 'Speak'}
-              </Text>
-              {isListening && <View style={[styles.listeningDot, { backgroundColor: c.textPrimary }]} />}
-            </TouchableOpacity>
-
-            <Animated.View style={{ opacity: saveFadeAnim }}>
-              <TouchableOpacity
-                style={[
-                  styles.saveBtn,
-                  { backgroundColor: noteEmpty ? 'transparent' : c.entryFill },
-                  noteEmpty && styles.saveBtnDisabled,
-                ]}
-                onPress={noteSaved ? undefined : handleNoteSave}
-                disabled={noteEmpty}
+            {isPickingTag ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.tagPickerRow}
               >
-                {noteSaved ? (
-                  <Check size={16} color={c.textPrimary} weight="bold" />
-                ) : (
-                  <Text style={[styles.saveBtnText, { color: noteEmpty ? c.textMuted : c.textPrimary }]}>
-                    Save
+                {NOTE_TAGS.map(tag => (
+                  <TagPill
+                    key={tag}
+                    label={tag}
+                    fillColor={c.entryFill}
+                    fillPressedColor={c.entryFillPressed}
+                    textColor={c.textPrimary}
+                    onPress={() => commitNoteSave(tag)}
+                  />
+                ))}
+                <TagPill
+                  label="Skip"
+                  muted
+                  fillColor={c.entryFill}
+                  fillPressedColor={c.entryFillPressed}
+                  textColor={c.textPrimary}
+                  onPress={() => commitNoteSave(null)}
+                />
+              </ScrollView>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.dictateBtn} onPress={handleDictationToggle}>
+                  <Waveform size={20} color={isListening ? c.textPrimary : c.textMuted} weight="regular" />
+                  <Text style={[styles.toolbarLabel, { color: isListening ? c.textPrimary : c.textMuted }]}>
+                    {isTranscribing ? 'Processing…' : isListening ? 'Listening' : 'Speak'}
                   </Text>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
+                  {isListening && <View style={[styles.listeningDot, { backgroundColor: c.textPrimary }]} />}
+                </TouchableOpacity>
+
+                <Animated.View style={{ opacity: saveFadeAnim }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.saveBtn,
+                      { backgroundColor: noteEmpty ? 'transparent' : c.entryFill },
+                      noteEmpty && styles.saveBtnDisabled,
+                    ]}
+                    onPress={noteSaved ? undefined : handleSavePress}
+                    disabled={noteEmpty}
+                  >
+                    {noteSaved ? (
+                      <Check size={16} color={c.textPrimary} weight="bold" />
+                    ) : (
+                      <Text style={[styles.saveBtnText, { color: noteEmpty ? c.textMuted : c.textPrimary }]}>
+                        Save
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+              </>
+            )}
           </View>
         </>
       ) : (
@@ -456,6 +530,21 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  tagPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tagPill: {
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tagPillText: {
+    fontSize: 14,
   },
   dictateBtn: {
     flexDirection: 'row',
