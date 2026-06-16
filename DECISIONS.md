@@ -76,6 +76,11 @@ The spec says "AsyncStorage" for conversation persistence. `@react-native-async-
 
 The three-mode system (task/chat/plan) and their separate system prompts are replaced by a single Vesper persona: warm, thoughtful, references vault context when available. `ConversationMode` type and the `mode` parameter on `sendMessage` are removed. ConversationScreen.tsx is retained as a file (not deleted) but is not wired into the navigator — it will remain dormant until further decision.
 
+## DECISION-013 — Display tier (32px) approved for greeting only
+2026-06-15 | `screens/HomeScreen.tsx`
+
+The global font scale caps at 19px, but the Home Screen spec explicitly approves a Display tier at 32px for the greeting ("Good morning." / "Good afternoon." / "Good evening.") — Cormorant Garamond SemiBold only. This is the emotional centrepiece of the screen and intentionally breaks the standard cap. No other element uses 32px; Review should treat this as a standing exception for `styles.greeting` in HomeScreen.tsx.
+
 ## DECISION-009 — Theme cross-fade uses content opacity animation, not gradient interpolation
 2026-06-14 | `screens/HomeScreen.tsx`
 

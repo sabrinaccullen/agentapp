@@ -124,7 +124,6 @@ export default function HomeScreen({ navigation }: Props) {
       <LinearGradient colors={[c.bgStart, c.bgEnd]} style={StyleSheet.absoluteFill} />
 
       <Animated.View style={[styles.content, { opacity: contentOpacity }]}>
-        {/* Header row */}
         <View style={[styles.header, { marginTop: insets.top + 20 }]}>
           <Text style={[styles.wordmark, { color: c.textPrimary }]}>vesper</Text>
           <TouchableOpacity
@@ -137,7 +136,6 @@ export default function HomeScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Greeting + entry prompt */}
         <View style={[styles.centreBlock, { top: SCREEN_HEIGHT * 0.40 }]}>
           <Text style={[styles.greeting, { color: c.textPrimary }]}>{greeting}</Text>
           <View style={styles.promptGap} />
@@ -163,7 +161,6 @@ export default function HomeScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* Bottom nav */}
         <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={[styles.separator, { backgroundColor: c.separator }]} />
           <View style={styles.navRow}>
@@ -179,7 +176,6 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       </Animated.View>
 
-      {/* Dim overlay — tapping behind the panel closes it */}
       {overlayOpen && (
         <Animated.View
           style={[styles.dim, { opacity: dimAnim }]}
@@ -189,7 +185,6 @@ export default function HomeScreen({ navigation }: Props) {
         </Animated.View>
       )}
 
-      {/* Overlay panel */}
       {overlayOpen && (
         <Animated.View
           style={[

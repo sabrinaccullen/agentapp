@@ -76,7 +76,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     getConversationMessages().then(setMessages);
   }, []);
 
-  // Cleanup recording on unmount
   useEffect(() => {
     return () => {
       if (isListeningRef.current) stopRecording().catch(() => {});
@@ -109,8 +108,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     }
     onRequestClose();
   }, [mode, noteText, onRequestClose]);
-
-  // --- Note dictation ---
 
   const startDictation = useCallback(async () => {
     setError('');
@@ -147,8 +144,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     else startDictation();
   }, [isListening, startDictation, stopDictation]);
 
-  // --- Note save ---
-
   const handleNoteSave = useCallback(async () => {
     if (!noteText.trim()) return;
     try {
@@ -167,8 +162,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
       setError(e.message);
     }
   }, [noteText, saveFadeAnim, onRequestClose]);
-
-  // --- Conversation ---
 
   const handleSend = useCallback(async (text?: string) => {
     const content = (text ?? inputText).trim();
@@ -239,9 +232,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Header */}
       <View style={styles.header}>
-        {/* Mode toggle */}
         <View style={styles.modeToggle}>
           <View style={styles.modeItem}>
             <TouchableOpacity onPress={() => switchMode('note')}>
@@ -262,7 +253,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
           </View>
         </View>
 
-        {/* Close */}
         <TouchableOpacity
           onPress={handleClose}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -272,7 +262,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Body */}
       {mode === 'note' ? (
         <>
           <View style={styles.noteBody}>
@@ -298,7 +287,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
             <Text style={[styles.inlineError, { color: c.textMuted }]}>{error}</Text>
           ) : null}
 
-          {/* Note toolbar */}
           <View style={[styles.toolbar, { borderTopColor: c.separator, paddingBottom: insets.bottom || 16 }]}>
             <TouchableOpacity style={styles.dictateBtn} onPress={handleDictationToggle}>
               <Waveform size={20} color={isListening ? c.textPrimary : c.textMuted} weight="regular" />
@@ -331,7 +319,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
         </>
       ) : (
         <>
-          {/* Conversation body */}
           <FlatList
             ref={listRef}
             data={messages}
@@ -366,7 +353,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
             <Text style={[styles.inlineError, { color: c.textMuted }]}>{error}</Text>
           ) : null}
 
-          {/* Conversation input row */}
           <View style={[styles.inputRow, { borderTopColor: c.separator, paddingBottom: insets.bottom || 16 }]}>
             <View style={[styles.inputPill, { backgroundColor: c.entryFill }]}>
               <TextInput
@@ -444,7 +430,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Note mode
   noteBody: {
     flex: 1,
     paddingHorizontal: 24,
@@ -504,7 +489,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 8,
   },
-  // Conversation mode
   messageList: {
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -537,7 +521,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  // Input row
   inputRow: {
     paddingHorizontal: 16,
     paddingTop: 12,

@@ -4,7 +4,7 @@ import {
   FlatList, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { sendMessage, Message } from '../utils/conversation';
+import { sendMessage, type Message } from '../utils/conversation';
 import { startListening, stopListening, isSpeechSupported } from '../utils/speech';
 import { startRecording, stopRecording } from '../utils/audio';
 import { transcribeAudio } from '../utils/transcribe';
