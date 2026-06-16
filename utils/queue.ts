@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { Capture, setSyncStatus, setProcessingStatus } from './database';
+import { type Capture, setSyncStatus, setProcessingStatus } from './database';
 import { getSecure } from './storage';
 import { appendToQueue, appendProcessedToQueue } from './vault';
 import { addLog } from './log';
@@ -54,12 +54,6 @@ Respond with a JSON object only, no other text:
   };
 }
 
-/**
- * Runs immediately after a note is saved: attempts Claude cleanup/tagging,
- * then syncs the resulting (processed or raw fallback) entry to the vault.
- * Replaces the old manual Queue/Process-with-Claude flow removed by the
- * History Screen renovation (HANDOFF-023) — every note processes itself once.
- */
 export async function processAndSyncCapture(capture: Capture): Promise<void> {
   if (Platform.OS === 'web') return;
 

@@ -12,7 +12,7 @@ import {
   PencilSimpleLine,
 } from 'phosphor-react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getAllCaptures, deleteCapture, Capture } from '../utils/database';
+import { getAllCaptures, deleteCapture, type Capture } from '../utils/database';
 import { processAndSyncCapture } from '../utils/queue';
 import { useTheme } from '../contexts/ThemeContext';
 import type { RootStackParamList } from './HomeScreen';
