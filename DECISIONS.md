@@ -143,6 +143,11 @@ Implemented with the existing primitives: `Animated.timing` with `Easing.out`/`E
 
 If Reanimated or gesture-handler is added for another feature, the dock animations can be migrated at that time.
 
+## DECISION-024 — Compose button removed from HistoryScreen (HANDOFF-034)
+2026-06-18 | `screens/HistoryScreen.tsx`
+
+Floating compose button, its open/close animation handlers, `overlayOpen` state, `dimAnim`/`slideAnim` animated values, and the inline `OverlayPanel` render block removed per spec revision. Home Screen entry prompt is the sole entry point for Notes and Conversations. `scrollContent` paddingBottom reduced from 100 to 32 — the extra clearance existed only to prevent cards overlapping the button. Also resolves BUG-016 (button overlapping last card) without a separate fix.
+
 ## DECISION-022 — Vesper reply streaming via raw SSE fetch; max_tokens reduced to 512
 2026-06-17 | `utils/conversation.ts`, `screens/OverlayPanel.tsx`
 

@@ -1,29 +1,25 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   StyleSheet, Text, View, ScrollView, TouchableOpacity,
-  TextInput, Animated, LayoutAnimation, UIManager, Platform,
-  AccessibilityInfo, Dimensions, StatusBar,
+  TextInput, LayoutAnimation, UIManager, Platform,
+  AccessibilityInfo, StatusBar,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CaretLeft, MagnifyingGlass, X, CloudCheck, CloudArrowUp, CloudSlash,
-  PencilSimpleLine,
 } from 'phosphor-react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getAllCaptures, deleteCapture, type Capture } from '../utils/database';
 import { processAndSyncCapture } from '../utils/queue';
 import { useTheme } from '../contexts/ThemeContext';
 import type { RootStackParamList } from './HomeScreen';
-import OverlayPanel from './OverlayPanel';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const OVERLAY_HEIGHT = SCREEN_HEIGHT * 0.92;
 const SEARCH_DEBOUNCE_MS = 200;
 
 type HistoryNavigationProp = NativeStackNavigationProp<RootStackParamList, 'History'>;
@@ -61,10 +57,7 @@ export default function HistoryScreen({ navigation }: Props) {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
-  const [overlayOpen, setOverlayOpen] = useState(false);
 
-  const dimAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(OVERLAY_HEIGHT)).current;
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(() => {
@@ -120,33 +113,6 @@ export default function HistoryScreen({ navigation }: Props) {
     setRetryingId(null);
     load();
   }, [load]);
-
-  const openOverlay = useCallback(() => {
-    setOverlayOpen(true);
-    if (reduceMotion) {
-      dimAnim.setValue(0.4);
-      slideAnim.setValue(0);
-      return;
-    }
-    Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 80, stiffness: 400, mass: 1 }),
-      Animated.timing(dimAnim, { toValue: 0.4, duration: 300, useNativeDriver: true }),
-    ]).start();
-  }, [reduceMotion, slideAnim, dimAnim]);
-
-  const closeOverlay = useCallback(() => {
-    if (reduceMotion) {
-      dimAnim.setValue(0);
-      slideAnim.setValue(OVERLAY_HEIGHT);
-      setOverlayOpen(false);
-      load();
-      return;
-    }
-    Animated.parallel([
-      Animated.timing(slideAnim, { toValue: OVERLAY_HEIGHT, duration: 280, useNativeDriver: true }),
-      Animated.timing(dimAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-    ]).start(() => { setOverlayOpen(false); load(); });
-  }, [reduceMotion, slideAnim, dimAnim, load]);
 
   const query = searchQuery.trim().toLowerCase();
   const notes = captures.filter(item => !query || item.text.toLowerCase().includes(query));
@@ -275,26 +241,6 @@ export default function HistoryScreen({ navigation }: Props) {
           </>
         )}
       </ScrollView>
-
-      <TouchableOpacity
-        style={[styles.composeBtn, { bottom: insets.bottom + 16, backgroundColor: 'rgba(255,255,255,0.10)', borderColor: 'rgba(255,255,255,0.12)' }]}
-        onPress={openOverlay}
-        activeOpacity={0.85}
-      >
-        <PencilSimpleLine size={20} color={c.textPrimary} weight="regular" />
-      </TouchableOpacity>
-
-      {overlayOpen && (
-        <Animated.View style={[styles.dim, { opacity: dimAnim }]} pointerEvents="box-none">
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeOverlay} activeOpacity={1} />
-        </Animated.View>
-      )}
-
-      {overlayOpen && (
-        <Animated.View style={[styles.overlayContainer, { transform: [{ translateY: slideAnim }] }]}>
-          <OverlayPanel onRequestClose={closeOverlay} />
-        </Animated.View>
-      )}
     </View>
   );
 }
@@ -320,7 +266,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: { flex: 1, fontSize: 16 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 32 },
   sectionHeader: { fontSize: 13, fontWeight: '600', marginBottom: 8, opacity: 0.55 },
   emptyText: { fontSize: 16, textAlign: 'center', opacity: 0.45, paddingVertical: 24 },
   noResults: { fontSize: 14, textAlign: 'center', opacity: 0.4, paddingTop: 24 },
@@ -346,22 +292,4 @@ const styles = StyleSheet.create({
   confirmText: { fontSize: 14, opacity: 0.9 },
   confirmActions: { flexDirection: 'row', gap: 16 },
   cancelLabel: { fontSize: 13, fontWeight: '500' },
-  composeBtn: {
-    position: 'absolute',
-    right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dim: { ...StyleSheet.absoluteFill, backgroundColor: '#000' },
-  overlayContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: OVERLAY_HEIGHT,
-  },
 });
