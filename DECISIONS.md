@@ -198,6 +198,23 @@ In `OverlayPanel.tsx`, `handleSend` appends a placeholder `{ role: 'assistant', 
 
 ---
 
+## DECISION-029 — HANDOFF-038 visual bug fixes: root causes and non-obvious choices
+2026-06-18 | `screens/OverlayPanel.tsx`, `utils/conversation.ts`
+
+**BUG-017 (overlay gradient invisible):** `OVERLAY_COLORS` values were so close to `#000000` (e.g. Golden Hour `#0E0603`/`#1E0C0E`) that they rendered as pure black on device. Replaced with values that are darker than the home screen but retain each theme's hue character (Golden Hour: `#190C06`→`#2D131C`, Candlelight: `#170A00`→`#261608`, Shoreline: `#060F16`→`#0A1E30`, Overcast: `#0C0F14`→`#151C2C`). The spec intent is "deeper gradient variant of active theme — more enclosed," not black.
+
+**BUG-018 (stray character count):** `{noteText.length}` was rendered in `noteBody` as a debug label — never in the spec. Removed entirely.
+
+**BUG-019 (History nav bar bleeds above overlay):** No code change required. The compose button was removed from HistoryScreen in commit `b136a21` (DECISION-024), eliminating the only entry point that triggered this scenario. The overlay now lives exclusively in HomeScreen, which has `headerShown: false` — no native nav bar exists to bleed above the overlay. Architecturally confirmed fixed.
+
+**BUG-020 (markdown renders literally):** Added "Write in plain prose — no markdown formatting, no asterisks, hashes, or bullet syntax." to the Vesper system prompt in `buildSystemPrompt`. No markdown renderer dependency needed. Consistent with the warm-companion voice — prose reads more natural than formatted lists.
+
+**BUG-021 (user bubble too opaque):** `userBlock` background changed from `c.entryFill` (`rgba(255,255,255,0.09)`) to `rgba(255,255,255,0.06)` inline. `entryFill` is shared with the entry prompt and input pill — changing the token would affect those. The 6% value matches the spec ("subtle white 6% surface").
+
+**BUG-022 (Skip pill clipped):** Added `paddingRight: 24` to `tagPickerRow` contentContainerStyle so the Skip pill has full clearance when the ScrollView is scrolled to its rightmost position.
+
+---
+
 ## DECISION-028 — Tasks & Reminders screen reads SQLite; completion tracked locally (HANDOFF-037)
 2026-06-18 | `screens/TasksRemindersScreen.tsx`, `utils/database.ts`
 

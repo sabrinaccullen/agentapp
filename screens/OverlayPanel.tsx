@@ -35,10 +35,10 @@ function FallbackGlow() {
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const OVERLAY_COLORS: Record<string, { bgStart: string; bgEnd: string }> = {
-  'Golden Hour': { bgStart: '#0E0603', bgEnd: '#1E0C0E' },
-  'Candlelight': { bgStart: '#0D0600', bgEnd: '#180D05' },
-  'Shoreline':   { bgStart: '#040B0E', bgEnd: '#061520' },
-  'Overcast':    { bgStart: '#0A0B0E', bgEnd: '#111520' },
+  'Golden Hour': { bgStart: '#190C06', bgEnd: '#2D131C' },
+  'Candlelight': { bgStart: '#170A00', bgEnd: '#261608' },
+  'Shoreline':   { bgStart: '#060F16', bgEnd: '#0A1E30' },
+  'Overcast':    { bgStart: '#0C0F14', bgEnd: '#151C2C' },
 };
 
 type Mode = 'note' | 'vesper';
@@ -403,11 +403,6 @@ export default function OverlayPanel({ onRequestClose }: Props) {
               textAlignVertical="top"
               autoFocus
             />
-            {noteText.length > 0 && (
-              <Text style={[styles.charCount, { color: `${c.textPrimary}66` }]}>
-                {noteText.length}
-              </Text>
-            )}
             {showFallbackGlow && <FallbackGlow />}
           </View>
 
@@ -485,7 +480,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => (
               item.role === 'user' ? (
-                <View style={[styles.userBlock, { backgroundColor: c.entryFill }]}>
+                <View style={[styles.userBlock, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
                   <Text style={[styles.userText, { color: `${c.textPrimary}D9` }]}>
                     {item.content}
                   </Text>
@@ -628,6 +623,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingRight: 24,
   },
   tagPill: {
     height: 32,
