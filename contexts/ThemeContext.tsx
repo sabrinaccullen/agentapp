@@ -13,6 +13,7 @@ export interface ThemeColors {
   entryPlaceholder: string;
   entryFillPressed: string;
   separator: string;
+  accent: string;
 }
 
 export interface ThemeDefinition {
@@ -33,6 +34,7 @@ export const THEMES: ThemeDefinition[] = [
       entryPlaceholder: 'rgba(255,255,255,0.45)',
       entryFillPressed: 'rgba(255,255,255,0.14)',
       separator: 'rgba(255,255,255,0.10)',
+      accent: '#8b5cf6',
     },
   },
   {
@@ -47,6 +49,7 @@ export const THEMES: ThemeDefinition[] = [
       entryPlaceholder: 'rgba(255,255,255,0.45)',
       entryFillPressed: 'rgba(255,255,255,0.14)',
       separator: 'rgba(255,255,255,0.10)',
+      accent: '#8b5cf6',
     },
   },
   {
@@ -61,6 +64,7 @@ export const THEMES: ThemeDefinition[] = [
       entryPlaceholder: 'rgba(255,255,255,0.45)',
       entryFillPressed: 'rgba(255,255,255,0.14)',
       separator: 'rgba(255,255,255,0.10)',
+      accent: '#8b5cf6',
     },
   },
   {
@@ -75,6 +79,7 @@ export const THEMES: ThemeDefinition[] = [
       entryPlaceholder: 'rgba(255,255,255,0.45)',
       entryFillPressed: 'rgba(255,255,255,0.14)',
       separator: 'rgba(255,255,255,0.10)',
+      accent: '#8b5cf6',
     },
   },
 ];

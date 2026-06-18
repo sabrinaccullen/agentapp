@@ -14,6 +14,7 @@
         "NSMicrophoneUsageDescription": "Used to record audio for transcription.",
         "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures.",
         "NSLocationWhenInUseUsageDescription": "Used to show weather for your current location.",
+        "NSCalendarsUsageDescription": "Used to show and create events in your calendar.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -44,6 +45,12 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Used to show weather for your current location."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Used to show and create events in your calendar."
         }
       ]
     ],
