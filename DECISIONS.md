@@ -148,6 +148,30 @@ If Reanimated or gesture-handler is added for another feature, the dock animatio
 
 Floating compose button, its open/close animation handlers, `overlayOpen` state, `dimAnim`/`slideAnim` animated values, and the inline `OverlayPanel` render block removed per spec revision. Home Screen entry prompt is the sole entry point for Notes and Conversations. `scrollContent` paddingBottom reduced from 100 to 32 — the extra clearance existed only to prevent cards overlapping the button. Also resolves BUG-016 (button overlapping last card) without a separate fix.
 
+## DECISION-025 — Weather screen uses Open-Meteo; expo-location for GPS + reverse geocode
+2026-06-18 | `utils/weather.ts`, `screens/WeatherScreen.tsx`, `app.json`, `package.json`
+
+Open-Meteo chosen as the weather API (no API key, no account, open-source). Only lat/lon coordinates leave the device — no identifying data shared with a third party. WeatherAPI.com was rejected (account/key ties location queries to an identity). Apple WeatherKit was rejected (requires a new provisioning entitlement on top of the EAS build already needed for expo-location).
+
+`expo-location` added for GPS (`getCurrentPositionAsync` with `Accuracy.Balanced`) and city name (`reverseGeocodeAsync`). Location coords are cached in refs so foreground-refresh calls skip the permission prompt and position fetch after the first load. `NSLocationWhenInUseUsageDescription` added to `app.json` `infoPlist` and the `expo-location` config plugin added to `plugins`. Requires a new EAS build — this is a native module.
+
+Condition-reactive gradient overrides the active theme on this screen only, per spec. WMO weather codes mapped to eight internal `WeatherCondition` values; gradient, icon, and label all derive from that mapping. `is_day` is fetched for both `current` and `hourly` so night variants apply correctly per slot.
+
+## DECISION-026 — Calendar screen uses PanResponder + Animated; expo-calendar for data; add-event stubbed
+2026-06-18 | `screens/CalendarScreen.tsx`, `app.json`, `package.json`, `contexts/ThemeContext.tsx`
+
+`react-native-gesture-handler` is not installed (DECISION-023). Day-swipe navigation uses `PanResponder` with `onMoveShouldSetPanResponder` returning true only when horizontal movement dominates (`|dx| > |dy|` and `|dx| > 16`). The PanResponder is on the outer `Animated.View` (day view container), not on the `ScrollView`, so vertical timeline scrolling is unaffected. Swipe threshold for a committed navigation is 40px; the transition is a cross-fade (100ms each way), not a drag visual.
+
+`expo-calendar` added for calendar data and permissions (`requestCalendarPermissionsAsync`, `getCalendarsAsync`, `getEventsAsync`). Config plugin and `NSCalendarsUsageDescription` added to `app.json`. Calendar colours come from the `color` property on each calendar object and are mapped by `calendarId` to each event card's dot. Events fetched ±30 days from the viewed date so month-view dots load without an extra request.
+
+`ThemeColors` interface extended with `accent: string` (all four themes: `#8b5cf6`, the design system accent from CLAUDE.md). Required by the month-grid today-circle spec ("grid-today-bg: theme accent at 100%"). Non-Golden-Hour themes remain placeholders per DECISION-007.
+
+Add-event form is stubbed (the `+` button does nothing). The separate add-event form spec is forthcoming from Design; `Calendar.createEventAsync()` will be wired once that spec lands.
+
+Requires a new EAS build — `expo-calendar` is a native module.
+
+---
+
 ## DECISION-022 — Vesper reply streaming via raw SSE fetch; max_tokens reduced to 512
 2026-06-17 | `utils/conversation.ts`, `screens/OverlayPanel.tsx`
 

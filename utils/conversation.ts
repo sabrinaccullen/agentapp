@@ -34,7 +34,11 @@ function buildSystemPrompt(wikiIndex: string, todayTasks: string, tomorrowTasks:
 Think out loud with her. Ask follow-up questions. Surface connections she might not see. Reference her wiki, goals, and current tasks naturally — weave them in rather than listing facts. Match her energy: warm and present, not formal. It's okay to gently push back or offer a different perspective. Responses should feel like a thoughtful companion, not a task manager.${taskContext}${wikiContext}`;
 }
 
-export async function sendMessage(userMessage: string, history: Message[]): Promise<string> {
+export async function sendMessage(
+  userMessage: string,
+  history: Message[],
+  onToken: (chunk: string) => void,
+): Promise<void> {
   if (Platform.OS === 'web') {
     throw new Error('Chat requires the mobile app — browser security blocks direct API calls.');
   }
@@ -60,7 +64,8 @@ export async function sendMessage(userMessage: string, history: Message[]): Prom
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 512,
+      stream: true,
       system: buildSystemPrompt(wikiIndex, todayTasks, tomorrowTasks),
       messages: [...history, { role: 'user', content: userMessage }],
     }),
@@ -71,6 +76,30 @@ export async function sendMessage(userMessage: string, history: Message[]): Prom
     throw new Error(err.error?.message || 'Request failed.');
   }
 
-  const data = await response.json();
-  return data.content[0].text;
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const json = line.slice(6).trim();
+      if (json === '[DONE]') return;
+      try {
+        const evt = JSON.parse(json);
+        if (
+          evt.type === 'content_block_delta' &&
+          evt.delta?.type === 'text_delta' &&
+          evt.delta.text
+        ) {
+          onToken(evt.delta.text);
+        }
+      } catch { /* malformed SSE line — skip */ }
+    }
+  }
 }
