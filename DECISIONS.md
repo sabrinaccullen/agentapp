@@ -172,6 +172,21 @@ Requires a new EAS build — `expo-calendar` is a native module.
 
 ---
 
+## DECISION-027 — HANDOFF-032 bug fixes: root causes and non-obvious choices
+2026-06-18 | `eas.json`, `App.tsx`, `screens/OverlayPanel.tsx`
+
+**BUG-011 (build number missing):** `Constants.nativeBuildVersion` returns null on preview and development EAS builds because `autoIncrement` was only set on the `production` profile in `eas.json`. Fixed by adding `autoIncrement: true` to both `development` and `preview` profiles. The About section code was correct; the build config was missing.
+
+**BUG-012 (dictation label / dot):** DECISION-021 misread the backlog — "Tap to stop" was applied as the permanent active-recording label when the spec only intended it as a fallback during the glow state (transcription failure). Restored to "Listening" for normal active state. The listening dot was a plain `View` (never animated); replaced with a `ListeningDot` component matching the `LoadingDot` pattern already in the file. `minHeight`/inline `Animated.Value` were considered but the component approach keeps the pulse logic self-contained and cleanup-safe.
+
+**BUG-013 (tag picker clipped):** `styles.toolbar` had `height: 52` as an absolute constraint. With `paddingBottom: insets.bottom || 16` added inline, the usable content space on iPhone 14+ is `52 - 34 = 18px` — less than the 32px tag pill height. `minHeight: 52` was considered but still constrains content below padding. Fixed by removing the height entirely and using `paddingTop: 10` instead, letting the toolbar size naturally to content + safe area padding.
+
+**BUG-014 (send error fires fallback glow):** `handleSend` called `await appendConversationMessage('user', content)` before the try block. If that SQLite write threw, the error propagated unhandled from `handleSend`. When `handleSend` was called from inside `handleConversationDictation`'s try block, that outer catch fired — which calls `triggerFallbackGlow()`. Fixed by moving the DB write inside the try block. Rule going forward: all async work in `handleSend` must be inside the try block.
+
+**BUG-015 (History header / back button):** `App.tsx` had `options={{ headerShown: true, title: 'History' }}` overriding the global `headerShown: false` — the native React Navigation header was rendering on top of HistoryScreen's custom top bar. Changed to `options={{ headerShown: false }}`. Settings was deliberately left with `headerShown: true` since it has no custom navigation of its own.
+
+---
+
 ## DECISION-022 — Vesper reply streaming via raw SSE fetch; max_tokens reduced to 512
 2026-06-17 | `utils/conversation.ts`, `screens/OverlayPanel.tsx`
 
