@@ -133,3 +133,21 @@ The backlog item asked for a downward swipe (≥50px) to dismiss the overlay, at
 2026-06-15 | `screens/OverlayPanel.tsx`
 
 The backlog item ("Overlay dictation fallback glow") replaces inline error text with a pulsing white-12%-opacity glow specifically when transcription fails or returns empty — not for all overlay errors. `startDictation`'s mic-permission failures, `commitNoteSave`'s save failures, and `handleSend`'s Claude API errors still use the existing inline error text; only `stopDictation`'s and the conversation-mode dictation handler's catch/empty-result paths trigger the glow (`triggerFallbackGlow`, auto-hides after 1.8s). The toolbar label during active recording also changed from "Listening" to "Tap to stop" per the same backlog item, independent of the glow.
+
+## DECISION-023 — Nav dock uses Animated + PanResponder, not Reanimated + gesture-handler
+2026-06-18 | `screens/HomeScreen.tsx`
+
+The approved spec (HANDOFF-033) specifies Reanimated `useAnimatedStyle`/`withTiming` and `react-native-gesture-handler` `PanGestureHandler`. Neither library is installed — both are native modules requiring a new EAS build. The existing codebase uses only `Animated` from `react-native` and `PanResponder`, and the behaviour spec is functionally identical with either approach.
+
+Implemented with the existing primitives: `Animated.timing` with `Easing.out`/`Easing.in` for dock slide, `PanResponder` on a 160px swipe zone (upward swipe → open) and on the dock itself (downward swipe → dismiss). Stale-closure problem solved with `dockOpenRef`/`reduceMotionRef`/`openDockRef`/`closeDockRef` mirrors, matching the pattern already used in `OverlayPanel.tsx`. Avoids two new native dependencies and an extra EAS build.
+
+If Reanimated or gesture-handler is added for another feature, the dock animations can be migrated at that time.
+
+## DECISION-022 — Vesper reply streaming via raw SSE fetch; max_tokens reduced to 512
+2026-06-17 | `utils/conversation.ts`, `screens/OverlayPanel.tsx`
+
+`sendMessage` now streams via `response.body.getReader()` + `TextDecoder`, parsing `content_block_delta` / `text_delta` SSE events. Signature changed from `Promise<string>` to `Promise<void>` with an `onToken: (chunk: string) => void` callback; callers accumulate the full reply via `streamAccRef` for DB persistence via `appendConversationMessage` after the stream resolves.
+
+In `OverlayPanel.tsx`, `handleSend` appends a placeholder `{ role: 'assistant', content: '' }` message immediately, then fills it in-place as tokens arrive (`setMessages` functional update). A `streaming` boolean state (mirrored in `streamingRef` to avoid stale closures in the callback) hides the animated dots once the first token lands — `ListFooterComponent` condition changed from `loading` to `loading && !streaming`. Errors during streaming pop the placeholder message and surface via inline error text as before. `max_tokens` reduced from 1024 → 512 to match the casual back-and-forth intent and keep per-reply latency tight.
+
+`response.body.getReader()` requires a real-device EAS build to verify — Hermes / React Native 0.85.3 supports it on iOS but simulator behavior can differ. If `response.body` is null on device, fallback would require `react-native-fetch-api` (new native module) — not pre-installed.

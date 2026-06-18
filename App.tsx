@@ -12,6 +12,9 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import WeatherScreen from './screens/WeatherScreen';
+import TasksRemindersScreen from './screens/TasksRemindersScreen';
+import CalendarScreen from './screens/CalendarScreen';
 import { setupNotificationHandler } from './utils/notifications';
 import type { RootStackParamList } from './screens/HomeScreen';
 
@@ -44,6 +47,9 @@ export default function App() {
               component={SettingsScreen}
               options={{ headerShown: true, title: 'Settings' }}
             />
+            <Stack.Screen name="Weather" component={WeatherScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TasksReminders" component={TasksRemindersScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Calendar" component={CalendarScreen} options={{ headerShown: false }} />
           </Stack.Navigator>
         </NavigationContainer>
       </ThemeProvider>
