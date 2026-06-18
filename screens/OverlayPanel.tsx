@@ -65,6 +65,23 @@ function LoadingDot({ delay, color }: LoadingDotProps) {
   );
 }
 
+function ListeningDot({ color }: { color: string }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [opacity]);
+
+  return <Animated.View style={[styles.listeningDot, { backgroundColor: color, opacity }]} />;
+}
+
 const NOTE_TAGS = ['Personal', 'Work', 'Idea', 'Reminder'];
 
 interface TagPillProps {
@@ -109,6 +126,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -119,6 +137,8 @@ export default function OverlayPanel({ onRequestClose }: Props) {
 
   const listRef = useRef<FlatList>(null);
   const isListeningRef = useRef(false);
+  const streamingRef = useRef(false);
+  const streamAccRef = useRef('');
   const noteInputRef = useRef<TextInput>(null);
   const underlineAnim = useRef(new Animated.Value(0)).current;
   const saveFadeAnim = useRef(new Animated.Value(1)).current;
@@ -256,22 +276,37 @@ export default function OverlayPanel({ onRequestClose }: Props) {
     const content = (text ?? inputText).trim();
     if (!content || loading) return;
     const userMsg: Message = { role: 'user', content };
-    const next = [...messages, userMsg];
+    const historySnapshot = messages;
+    const next = [...messages, userMsg, { role: 'assistant' as const, content: '' }];
     setMessages(next);
     setInputText('');
     setError('');
     setLoading(true);
-    await appendConversationMessage('user', content);
+    streamAccRef.current = '';
+    streamingRef.current = false;
     try {
-      const reply = await sendMessage(content, messages);
-      const updated = [...next, { role: 'assistant' as const, content: reply }];
-      setMessages(updated);
-      await appendConversationMessage('assistant', reply);
+      await appendConversationMessage('user', content);
+      await sendMessage(content, historySnapshot, (chunk: string) => {
+        if (!streamingRef.current) {
+          setStreaming(true);
+          streamingRef.current = true;
+        }
+        streamAccRef.current += chunk;
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', content: streamAccRef.current };
+          return updated;
+        });
+      });
+      await appendConversationMessage('assistant', streamAccRef.current);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (e: any) {
+      setMessages(prev => prev.slice(0, -1));
       setError(e.message);
     } finally {
       setLoading(false);
+      setStreaming(false);
+      streamingRef.current = false;
     }
   }, [inputText, loading, messages]);
 
@@ -412,9 +447,9 @@ export default function OverlayPanel({ onRequestClose }: Props) {
                 <TouchableOpacity style={styles.dictateBtn} onPress={handleDictationToggle}>
                   <Waveform size={20} color={isListening ? c.textPrimary : c.textMuted} weight="regular" />
                   <Text style={[styles.toolbarLabel, { color: isListening ? c.textPrimary : c.textMuted }]}>
-                    {isTranscribing ? 'Processing…' : isListening ? 'Tap to stop' : 'Speak'}
+                    {isTranscribing ? 'Processing…' : isListening ? 'Listening' : 'Speak'}
                   </Text>
-                  {isListening && <View style={[styles.listeningDot, { backgroundColor: c.textPrimary }]} />}
+                  {isListening && <ListeningDot color={c.textPrimary} />}
                 </TouchableOpacity>
 
                 <Animated.View style={{ opacity: saveFadeAnim }}>
@@ -462,7 +497,7 @@ export default function OverlayPanel({ onRequestClose }: Props) {
               )
             )}
             ListFooterComponent={
-              loading ? (
+              loading && !streaming ? (
                 <View style={styles.dotsRow}>
                   <LoadingDot delay={0} color={c.textMuted} />
                   <LoadingDot delay={200} color={c.textMuted} />
@@ -585,7 +620,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 52,
+    paddingTop: 10,
     paddingHorizontal: 24,
     borderTopWidth: StyleSheet.hairlineWidth,
   },

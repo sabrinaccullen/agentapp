@@ -40,7 +40,7 @@ export default function App() {
             <Stack.Screen
               name="History"
               component={HistoryScreen}
-              options={{ headerShown: true, title: 'History' }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Settings"
