@@ -13,6 +13,7 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Used to record audio for transcription.",
         "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures.",
+        "NSLocationWhenInUseUsageDescription": "Used to show weather for your current location.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -38,7 +39,13 @@
           "color": "#6B4EFF"
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Used to show weather for your current location."
+        }
+      ]
     ],
     "extra": {
       "eas": {
