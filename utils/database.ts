@@ -12,6 +12,8 @@ export interface Capture {
   tag: string | null;
   syncStatus: SyncStatus;
   processingStatus: ProcessingStatus;
+  completed: boolean;
+  completedAt: number | null;
 }
 
 // --- Web fallback (localStorage) ---
@@ -45,7 +47,9 @@ async function getDb() {
         queued INTEGER DEFAULT 0,
         tag TEXT,
         sync_status TEXT DEFAULT 'pending',
-        processing_status TEXT DEFAULT 'processing'
+        processing_status TEXT DEFAULT 'processing',
+        completed INTEGER DEFAULT 0,
+        completed_at INTEGER
       );
       CREATE TABLE IF NOT EXISTS conversation_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +63,8 @@ async function getDb() {
     try { await db.execAsync('ALTER TABLE captures ADD COLUMN tag TEXT'); } catch {}
     try { await db.execAsync("ALTER TABLE captures ADD COLUMN sync_status TEXT DEFAULT 'pending'"); } catch {}
     try { await db.execAsync("ALTER TABLE captures ADD COLUMN processing_status TEXT DEFAULT 'processing'"); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN completed INTEGER DEFAULT 0'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN completed_at INTEGER'); } catch {}
   }
   return db;
 }
@@ -73,6 +79,8 @@ function rowToCapture(row: any): Capture {
     tag: row.tag ?? null,
     syncStatus: (row.sync_status ?? 'pending') as SyncStatus,
     processingStatus: (row.processing_status ?? 'processing') as ProcessingStatus,
+    completed: Boolean(row.completed),
+    completedAt: row.completed_at ?? null,
   };
 }
 
@@ -92,6 +100,8 @@ export async function saveCapture(
     tag,
     syncStatus: 'pending',
     processingStatus: 'processing',
+    completed: false,
+    completedAt: null,
   };
 
   if (Platform.OS === 'web') {
@@ -116,6 +126,8 @@ export async function getAllCaptures(): Promise<Capture[]> {
       tag: c.tag ?? null,
       syncStatus: c.syncStatus ?? 'pending',
       processingStatus: c.processingStatus ?? 'processing',
+      completed: c.completed ?? false,
+      completedAt: c.completedAt ?? null,
     }));
   }
   const database = await getDb();
@@ -139,6 +151,18 @@ export async function setSyncStatus(id: string, status: SyncStatus): Promise<voi
   }
   const database = await getDb();
   await database.runAsync('UPDATE captures SET sync_status = ? WHERE id = ?', [status, id]);
+}
+
+export async function setCompleted(id: string, completed: boolean, completedAt: number | null): Promise<void> {
+  if (Platform.OS === 'web') {
+    webSaveAll(webGetAll().map(c => c.id === id ? { ...c, completed, completedAt } : c));
+    return;
+  }
+  const database = await getDb();
+  await database.runAsync(
+    'UPDATE captures SET completed = ?, completed_at = ? WHERE id = ?',
+    [completed ? 1 : 0, completedAt, id]
+  );
 }
 
 export async function setProcessingStatus(id: string, status: ProcessingStatus): Promise<void> {

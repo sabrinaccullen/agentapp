@@ -195,3 +195,14 @@ Requires a new EAS build — `expo-calendar` is a native module.
 In `OverlayPanel.tsx`, `handleSend` appends a placeholder `{ role: 'assistant', content: '' }` message immediately, then fills it in-place as tokens arrive (`setMessages` functional update). A `streaming` boolean state (mirrored in `streamingRef` to avoid stale closures in the callback) hides the animated dots once the first token lands — `ListFooterComponent` condition changed from `loading` to `loading && !streaming`. Errors during streaming pop the placeholder message and surface via inline error text as before. `max_tokens` reduced from 1024 → 512 to match the casual back-and-forth intent and keep per-reply latency tight.
 
 `response.body.getReader()` requires a real-device EAS build to verify — Hermes / React Native 0.85.3 supports it on iOS but simulator behavior can differ. If `response.body` is null on device, fallback would require `react-native-fetch-api` (new native module) — not pre-installed.
+
+---
+
+## DECISION-028 — Tasks & Reminders screen reads SQLite; completion tracked locally (HANDOFF-037)
+2026-06-18 | `screens/TasksRemindersScreen.tsx`, `utils/database.ts`
+
+Data source is the local SQLite `captures` table filtered by `tag = 'task'` or `tag = 'reminder'` — no GitHub vault reads. The spec describes vault notes with YAML frontmatter, but the app's vault pipeline writes to `processing-queue.md` as plain list entries with no `- [ ]` checkbox syntax. There is no clean mechanism to locate and update individual entries after the fact, so completion is tracked entirely in SQLite (`completed INTEGER`, `completed_at INTEGER` columns added via ALTER TABLE migration). The spec's "writes `- [x]` to vault" behaviour is deferred to when vault writes move to per-note individual files.
+
+Swipe-to-delete uses `PanResponder` (not `react-native-gesture-handler`) consistent with DECISION-023. Each `SwipeableItemCard` manages its own translate animation and confirm state. The outer container uses `overflow: hidden` with the red delete action absolutely positioned at the right edge; the card translates left to reveal it. Threshold to commit a swipe is 40px; below that, the card snaps back.
+
+Undo toast uses a `setTimeout` of 4000ms cleared on unmount and on Undo tap. Tapping Undo calls `setCompleted(id, false, null)` and reloads the list.
