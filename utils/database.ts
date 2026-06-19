@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 export type SyncStatus = 'pending' | 'synced' | 'failed';
 export type ProcessingStatus = 'processing' | 'processed' | 'failed';
 
+export interface AttachmentFile { name: string; path: string; }
+
 export interface Capture {
   id: string;
   text: string;
@@ -14,6 +16,10 @@ export interface Capture {
   processingStatus: ProcessingStatus;
   completed: boolean;
   completedAt: number | null;
+  attachmentNote: string | null;
+  attachmentLink: string | null;
+  attachmentPhotos: string[];
+  attachmentFiles: AttachmentFile[];
 }
 
 // --- Web fallback (localStorage) ---
@@ -65,6 +71,10 @@ async function getDb() {
     try { await db.execAsync("ALTER TABLE captures ADD COLUMN processing_status TEXT DEFAULT 'processing'"); } catch {}
     try { await db.execAsync('ALTER TABLE captures ADD COLUMN completed INTEGER DEFAULT 0'); } catch {}
     try { await db.execAsync('ALTER TABLE captures ADD COLUMN completed_at INTEGER'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN attachment_note TEXT'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN attachment_link TEXT'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN attachment_photos TEXT'); } catch {}
+    try { await db.execAsync('ALTER TABLE captures ADD COLUMN attachment_files TEXT'); } catch {}
   }
   return db;
 }
@@ -81,6 +91,10 @@ function rowToCapture(row: any): Capture {
     processingStatus: (row.processing_status ?? 'processing') as ProcessingStatus,
     completed: Boolean(row.completed),
     completedAt: row.completed_at ?? null,
+    attachmentNote: row.attachment_note ?? null,
+    attachmentLink: row.attachment_link ?? null,
+    attachmentPhotos: row.attachment_photos ? JSON.parse(row.attachment_photos) : [],
+    attachmentFiles: row.attachment_files ? JSON.parse(row.attachment_files) : [],
   };
 }
 
@@ -102,6 +116,10 @@ export async function saveCapture(
     processingStatus: 'processing',
     completed: false,
     completedAt: null,
+    attachmentNote: null,
+    attachmentLink: null,
+    attachmentPhotos: [],
+    attachmentFiles: [],
   };
 
   if (Platform.OS === 'web') {
@@ -128,6 +146,10 @@ export async function getAllCaptures(): Promise<Capture[]> {
       processingStatus: c.processingStatus ?? 'processing',
       completed: c.completed ?? false,
       completedAt: c.completedAt ?? null,
+      attachmentNote: c.attachmentNote ?? null,
+      attachmentLink: c.attachmentLink ?? null,
+      attachmentPhotos: c.attachmentPhotos ?? [],
+      attachmentFiles: c.attachmentFiles ?? [],
     }));
   }
   const database = await getDb();
@@ -172,6 +194,26 @@ export async function setProcessingStatus(id: string, status: ProcessingStatus):
   }
   const database = await getDb();
   await database.runAsync('UPDATE captures SET processing_status = ? WHERE id = ?', [status, id]);
+}
+
+export async function updateAttachments(
+  id: string,
+  note: string | null,
+  link: string | null,
+  photos: string[],
+  files: AttachmentFile[],
+): Promise<void> {
+  if (Platform.OS === 'web') {
+    webSaveAll(webGetAll().map(c =>
+      c.id === id ? { ...c, attachmentNote: note, attachmentLink: link, attachmentPhotos: photos, attachmentFiles: files } : c
+    ));
+    return;
+  }
+  const database = await getDb();
+  await database.runAsync(
+    'UPDATE captures SET attachment_note = ?, attachment_link = ?, attachment_photos = ?, attachment_files = ? WHERE id = ?',
+    [note, link, photos.length ? JSON.stringify(photos) : null, files.length ? JSON.stringify(files) : null, id]
+  );
 }
 
 // --- Conversation messages ---

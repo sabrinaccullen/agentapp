@@ -223,3 +223,22 @@ Data source is the local SQLite `captures` table filtered by `tag = 'task'` or `
 Swipe-to-delete uses `PanResponder` (not `react-native-gesture-handler`) consistent with DECISION-023. Each `SwipeableItemCard` manages its own translate animation and confirm state. The outer container uses `overflow: hidden` with the red delete action absolutely positioned at the right edge; the card translates left to reveal it. Threshold to commit a swipe is 40px; below that, the card snaps back.
 
 Undo toast uses a `setTimeout` of 4000ms cleared on unmount and on Undo tap. Tapping Undo calls `setCompleted(id, false, null)` and reloads the list.
+
+---
+
+## DECISION-030 — Task attachment editor: SQLite-local storage, legacy file-system API, Linking for file open (HANDOFF-044)
+2026-06-18 | `screens/TasksRemindersScreen.tsx`, `utils/database.ts`
+
+**Attachment data storage:** Four new nullable SQLite columns on `captures`: `attachment_note TEXT`, `attachment_link TEXT`, `attachment_photos TEXT` (JSON array of local paths), `attachment_files TEXT` (JSON array of `{name, path}` objects). Added via `ALTER TABLE` migration consistent with DECISION-028. The spec's vault write-back (`> blockquote`, `[url](url)`, `![[filename]]`) is deferred — iOS sandboxing prevents writing to the Obsidian app's document directory directly, and there are no per-note vault files to target yet.
+
+**File storage path:** Copied files land in the app's own document directory (`documentDirectory + 'attachments/'`), not in the Obsidian vault `attachments/` folder. On iOS, we cannot write outside the app sandbox. When vault write-back is implemented (likely via a server-side route or iCloud Drive bridge), the local copies will serve as the source to push from.
+
+**expo-file-system legacy API:** SDK 56 ships a new class-based `File`/`Directory` API as the primary export. The legacy procedural API (`documentDirectory`, `copyAsync`, `makeDirectoryAsync`) moved to `expo-file-system/legacy`. Using the legacy path here to stay consistent with the existing pattern; migrate to the new API in a dedicated pass if needed.
+
+**Photo lightbox:** `Modal` + `FlatList` (horizontal, pagingEnabled) + `PanResponder` swipe-down dismiss. No `react-native-image-viewing` dependency added — consistent with DECISION-023 (avoid unvetted native dependencies).
+
+**File opening:** `Linking.openURL(path)` with a silent catch. The legacy file path returned by `documentDirectory` already starts with `file://`, making it a valid URI. On iOS, the system opens supported file types (PDFs, images) via Quick Look or the Files app; unsupported types fail silently.
+
+**Attachment area — tasks only:** Expansion and the attachment area are rendered only when `type === 'task'`. Reminder cards remain unchanged.
+
+**Card expansion:** Tapping the text/timestamp column of a task card toggles `expanded` state (internal to `SwipeableItemCard`). Card fill bumps from `rgba(255,255,255,0.07)` to `rgba(255,255,255,0.09)` when expanded, per spec. The `PanResponder` swipe behaviour is unaffected (it only captures dx > 8, never triggered by a tap).

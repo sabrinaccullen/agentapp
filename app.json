@@ -15,6 +15,7 @@
         "NSSpeechRecognitionUsageDescription": "Used to transcribe your voice captures.",
         "NSLocationWhenInUseUsageDescription": "Used to show weather for your current location.",
         "NSCalendarsUsageDescription": "Used to show and create events in your calendar.",
+        "NSPhotoLibraryUsageDescription": "Used to attach photos to your tasks.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -52,7 +53,15 @@
         {
           "calendarPermission": "Used to show and create events in your calendar."
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Used to attach photos to your tasks."
+        }
+      ],
+      "expo-document-picker",
+      "expo-file-system"
     ],
     "extra": {
       "eas": {

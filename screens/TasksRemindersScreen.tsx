@@ -1,14 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, FlatList,
   Animated, Easing, PanResponder, StatusBar, AccessibilityInfo,
+  TextInput, Modal, Image, Linking, KeyboardAvoidingView, ActionSheetIOS,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { CaretLeft, CircleIcon, CheckCircle, Clock, Trash } from 'phosphor-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { documentDirectory, copyAsync, makeDirectoryAsync } from 'expo-file-system/legacy';
+import {
+  CaretLeft, CircleIcon, CheckCircle, Clock, Trash,
+  TextT, Link as LinkIcon, Plus, X as XIcon,
+  FilePdf, FileDoc, FileImage, File as FileIcon,
+  CaretLeft as ArrowLeft, CaretRight as ArrowRight,
+} from 'phosphor-react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getAllCaptures, deleteCapture, setCompleted, type Capture } from '../utils/database';
+import { getAllCaptures, deleteCapture, setCompleted, updateAttachments, type Capture, type AttachmentFile } from '../utils/database';
 import { useTheme } from '../contexts/ThemeContext';
 import type { RootStackParamList } from './HomeScreen';
 
@@ -17,6 +27,7 @@ interface Props { navigation: TasksRemindersNavigationProp; }
 
 const COMPLETED_COLLAPSE_THRESHOLD = 5;
 const DELETE_REVEAL_WIDTH = 80;
+const ATTACHMENTS_DIR = (documentDirectory ?? '') + 'attachments/';
 
 function formatTimestamp(ts: number): string {
   const d = new Date(ts);
@@ -31,6 +42,448 @@ function formatTimestamp(ts: number): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+function fileTypeIcon(name: string, color: string) {
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return <FilePdf size={16} color={color} weight="regular" />;
+  if (ext === 'doc' || ext === 'docx') return <FileDoc size={16} color={color} weight="regular" />;
+  if (['jpg', 'jpeg', 'png', 'gif', 'heic', 'webp'].includes(ext)) return <FileImage size={16} color={color} weight="regular" />;
+  return <FileIcon size={16} color={color} weight="regular" />;
+}
+
+function hostnameFromURL(url: string): string {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+// --- Photo Lightbox ---
+
+interface LightboxProps {
+  photos: string[];
+  initialIndex: number;
+  visible: boolean;
+  reduceMotion: boolean;
+  onClose: () => void;
+}
+
+function PhotoLightbox({ photos, initialIndex, visible, reduceMotion, onClose }: LightboxProps) {
+  const listRef = useRef<FlatList<string>>(null);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const dismissY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      dismissY.setValue(0);
+      setCurrentIndex(initialIndex);
+      setTimeout(() => {
+        listRef.current?.scrollToIndex({ index: initialIndex, animated: false });
+      }, 50);
+    }
+  }, [visible, initialIndex, dismissY]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 10 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onPanResponderMove: (_, gs) => { if (gs.dy > 0) dismissY.setValue(gs.dy); },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 50) {
+          if (reduceMotion) { onClose(); return; }
+          Animated.timing(dismissY, { toValue: 600, duration: 220, useNativeDriver: true }).start(onClose);
+        } else {
+          Animated.timing(dismissY, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <Animated.View style={[styles.lightboxRoot, { transform: [{ translateY: dismissY }] }]} {...panResponder.panHandlers}>
+        <FlatList
+          ref={listRef}
+          data={photos}
+          keyExtractor={(_, i) => String(i)}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          scrollEnabled={!reduceMotion}
+          initialScrollIndex={initialIndex}
+          getItemLayout={(_, index) => ({ length: styles.lightboxRoot.width ?? 400, offset: (styles.lightboxRoot.width ?? 400) * index, index })}
+          onMomentumScrollEnd={e => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / e.nativeEvent.layoutMeasurement.width);
+            setCurrentIndex(idx);
+          }}
+          renderItem={({ item }) => (
+            <View style={styles.lightboxPage}>
+              <Image source={{ uri: item }} style={styles.lightboxImage} resizeMode="contain" />
+            </View>
+          )}
+        />
+
+        {photos.length > 1 && (
+          <>
+            {currentIndex > 0 && (
+              <TouchableOpacity
+                style={styles.lightboxArrowLeft}
+                onPress={() => {
+                  const next = currentIndex - 1;
+                  listRef.current?.scrollToIndex({ index: next, animated: !reduceMotion });
+                  setCurrentIndex(next);
+                }}
+              >
+                <ArrowLeft size={24} color="rgba(255,255,255,0.7)" weight="regular" />
+              </TouchableOpacity>
+            )}
+            {currentIndex < photos.length - 1 && (
+              <TouchableOpacity
+                style={styles.lightboxArrowRight}
+                onPress={() => {
+                  const next = currentIndex + 1;
+                  listRef.current?.scrollToIndex({ index: next, animated: !reduceMotion });
+                  setCurrentIndex(next);
+                }}
+              >
+                <ArrowRight size={24} color="rgba(255,255,255,0.7)" weight="regular" />
+              </TouchableOpacity>
+            )}
+            <View style={styles.lightboxDots}>
+              {photos.map((_, i) => (
+                <View key={i} style={[styles.lightboxDot, { opacity: i === currentIndex ? 1 : 0.35 }]} />
+              ))}
+            </View>
+          </>
+        )}
+
+        <TouchableOpacity style={styles.lightboxClose} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <XIcon size={24} color="#fff" weight="regular" />
+        </TouchableOpacity>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+// --- Attachment Area ---
+
+interface AttachmentAreaProps {
+  captureId: string;
+  initialNote: string | null;
+  initialLink: string | null;
+  initialPhotos: string[];
+  initialFiles: AttachmentFile[];
+  accent: string;
+  textPrimary: string;
+  reduceMotion: boolean;
+}
+
+function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, initialFiles, accent, textPrimary, reduceMotion }: AttachmentAreaProps) {
+  const [noteText, setNoteText] = useState(initialNote ?? '');
+  const [editingNote, setEditingNote] = useState(false);
+  const [linkText, setLinkText] = useState(initialLink ?? '');
+  const [editingLink, setEditingLink] = useState(false);
+  const [photos, setPhotos] = useState<string[]>(initialPhotos);
+  const [files, setFiles] = useState<AttachmentFile[]>(initialFiles);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const noteRef = useRef(noteText);
+  const linkRef = useRef(linkText);
+  const photosRef = useRef(photos);
+  const filesRef = useRef(files);
+
+  useEffect(() => { noteRef.current = noteText; }, [noteText]);
+  useEffect(() => { linkRef.current = linkText; }, [linkText]);
+  useEffect(() => { photosRef.current = photos; }, [photos]);
+  useEffect(() => { filesRef.current = files; }, [files]);
+
+  const persist = useCallback((
+    note: string, link: string, ph: string[], fi: AttachmentFile[]
+  ) => {
+    updateAttachments(
+      captureId,
+      note.trim() || null,
+      link.trim() || null,
+      ph,
+      fi,
+    ).catch(() => {});
+  }, [captureId]);
+
+  const saveNote = useCallback(() => {
+    setEditingNote(false);
+    persist(noteRef.current, linkRef.current, photosRef.current, filesRef.current);
+  }, [persist]);
+
+  const saveLink = useCallback(() => {
+    setEditingLink(false);
+    const trimmed = linkRef.current.trim();
+    setLinkText(trimmed);
+    persist(noteRef.current, trimmed, photosRef.current, filesRef.current);
+  }, [persist]);
+
+  const removeNote = useCallback(() => {
+    setNoteText('');
+    setEditingNote(false);
+    persist('', linkRef.current, photosRef.current, filesRef.current);
+  }, [persist]);
+
+  const removeLink = useCallback(() => {
+    setLinkText('');
+    setEditingLink(false);
+    persist(noteRef.current, '', photosRef.current, filesRef.current);
+  }, [persist]);
+
+  const ensureDir = useCallback(async () => {
+    await makeDirectoryAsync(ATTACHMENTS_DIR, { intermediates: true }).catch(() => {});
+  }, []);
+
+  const openPhotoPicker = useCallback(async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const remaining = 5 - photosRef.current.length;
+    if (remaining <= 0) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: remaining,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets.length) return;
+    await ensureDir();
+    const newPaths: string[] = [];
+    for (const asset of result.assets) {
+      const ext = asset.uri.split('.').pop() ?? 'jpg';
+      const filename = `photo_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const dest = ATTACHMENTS_DIR + filename;
+      await copyAsync({ from: asset.uri, to: dest });
+      newPaths.push(dest);
+    }
+    const updated = [...photosRef.current, ...newPaths];
+    setPhotos(updated);
+    persist(noteRef.current, linkRef.current, updated, filesRef.current);
+  }, [ensureDir, persist]);
+
+  const openDocumentPicker = useCallback(async () => {
+    if (filesRef.current.length >= 3) return;
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    await ensureDir();
+    const dest = ATTACHMENTS_DIR + asset.name;
+    await copyAsync({ from: asset.uri, to: dest });
+    const updated = [...filesRef.current, { name: asset.name, path: dest }];
+    setFiles(updated);
+    persist(noteRef.current, linkRef.current, photosRef.current, updated);
+  }, [ensureDir, persist]);
+
+  const showAttachmentSheet = useCallback(() => {
+    const photoAtLimit = photosRef.current.length >= 5;
+    const fileAtLimit = filesRef.current.length >= 3;
+    const options = [
+      photoAtLimit ? `Photos (5 of 5 added)` : 'Photos',
+      fileAtLimit ? `Files (3 of 3 added)` : 'Files',
+      'Cancel',
+    ];
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Add Attachment',
+        options,
+        cancelButtonIndex: 2,
+        disabledButtonIndices: [
+          ...(photoAtLimit ? [0] : []),
+          ...(fileAtLimit ? [1] : []),
+        ],
+      },
+      (buttonIndex) => {
+        if (buttonIndex === 0 && !photoAtLimit) openPhotoPicker();
+        if (buttonIndex === 1 && !fileAtLimit) openDocumentPicker();
+      }
+    );
+  }, [openPhotoPicker, openDocumentPicker]);
+
+  const removePhoto = useCallback((index: number) => {
+    const updated = photosRef.current.filter((_, i) => i !== index);
+    setPhotos(updated);
+    persist(noteRef.current, linkRef.current, updated, filesRef.current);
+  }, [persist]);
+
+  const removeFile = useCallback((index: number) => {
+    const updated = filesRef.current.filter((_, i) => i !== index);
+    setFiles(updated);
+    persist(noteRef.current, linkRef.current, photosRef.current, updated);
+  }, [persist]);
+
+  const hasNote = noteText.trim().length > 0;
+  const hasLink = linkText.trim().length > 0;
+  const hasPhotos = photos.length > 0;
+  const hasFiles = files.length > 0;
+  const hasAnyAttachment = hasPhotos || hasFiles;
+
+  const chipFill = 'rgba(255,255,255,0.08)';
+  const inputFill = 'rgba(255,255,255,0.06)';
+  const fileFill = 'rgba(255,255,255,0.10)';
+  const iconColor = `${textPrimary}73`;
+  const contentColor = `${textPrimary}BF`;
+  const removeColor = `${textPrimary}66`;
+  const placeholderColor = `${textPrimary}4D`;
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.attachDivider} />
+      <View style={styles.attachArea}>
+
+        {/* Note slot */}
+        {editingNote ? (
+          <TextInput
+            style={[styles.attachInput, { backgroundColor: inputFill, color: `${textPrimary}E6` }]}
+            value={noteText}
+            onChangeText={setNoteText}
+            onBlur={saveNote}
+            placeholder="Add a note…"
+            placeholderTextColor={placeholderColor}
+            multiline
+            scrollEnabled={false}
+            textAlignVertical="top"
+            returnKeyType="default"
+            autoFocus
+          />
+        ) : hasNote ? (
+          <View style={styles.attachRow}>
+            <TextT size={16} color={iconColor} weight="regular" />
+            <TouchableOpacity style={styles.attachRowContent} onPress={() => setEditingNote(true)}>
+              <Text style={[styles.attachRowText, { color: contentColor }]} numberOfLines={1}>
+                {noteText}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={removeNote} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.attachRemoveHit}>
+              <XIcon size={16} color={removeColor} weight="regular" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Link slot */}
+        {editingLink ? (
+          <View style={styles.attachRow}>
+            <LinkIcon size={16} color={iconColor} weight="regular" />
+            <TextInput
+              style={[styles.attachInputInline, { backgroundColor: inputFill, color: `${textPrimary}E6` }]}
+              value={linkText}
+              onChangeText={setLinkText}
+              onBlur={saveLink}
+              placeholder="Paste or type a URL…"
+              placeholderTextColor={placeholderColor}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={saveLink}
+              autoFocus
+            />
+          </View>
+        ) : hasLink ? (
+          <View style={styles.attachRow}>
+            <LinkIcon size={16} color={iconColor} weight="regular" />
+            <TouchableOpacity style={styles.attachRowContent} onPress={() => setEditingLink(true)}>
+              <Text style={[styles.attachRowText, { color: contentColor }]} numberOfLines={1}>
+                {hostnameFromURL(linkText)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={removeLink} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.attachRemoveHit}>
+              <XIcon size={16} color={removeColor} weight="regular" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Photo row */}
+        {hasAnyAttachment && (
+          <View style={styles.photoRow}>
+            {photos.map((uri, i) => (
+              <View key={uri} style={styles.photoThumbWrap}>
+                <TouchableOpacity onPress={() => { setLightboxIndex(i); setLightboxVisible(true); }} activeOpacity={0.85}>
+                  <Image source={{ uri }} style={styles.photoThumb} resizeMode="cover" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.photoBadge}
+                  onPress={() => removePhoto(i)}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <XIcon size={10} color="#000" weight="bold" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {photos.length < 5 && (
+              <TouchableOpacity style={styles.photoAddBtn} onPress={openPhotoPicker}>
+                <Plus size={20} color="rgba(255,255,255,0.40)" weight="regular" />
+              </TouchableOpacity>
+            )}
+            <Text style={[styles.countLabel, { color: `${textPrimary}59` }]}>
+              {photos.length} / 5
+            </Text>
+          </View>
+        )}
+
+        {/* File chips */}
+        {hasAnyAttachment && (
+          <View style={styles.fileChipRow}>
+            {files.map((f, i) => (
+              <View key={f.path} style={[styles.fileChip, { backgroundColor: fileFill }]}>
+                <TouchableOpacity
+                  style={styles.fileChipInner}
+                  onPress={() => Linking.openURL(f.path).catch(() => {})}
+                  activeOpacity={0.7}
+                >
+                  {fileTypeIcon(f.name, `${textPrimary}8C`)}
+                  <Text style={[styles.fileChipName, { color: `${textPrimary}CC` }]} numberOfLines={1}>
+                    {f.name.length > 19 ? f.name.slice(0, 16) + '…' + (f.name.split('.').pop() ? '.' + f.name.split('.').pop() : '') : f.name}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => removeFile(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <XIcon size={14} color={removeColor} weight="regular" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {files.length < 3 && (
+              <TouchableOpacity style={[styles.actionChip, { backgroundColor: chipFill }]} onPress={openDocumentPicker}>
+                <Text style={[styles.actionChipLabel, { color: `${textPrimary}B3` }]}>+ File</Text>
+              </TouchableOpacity>
+            )}
+            <Text style={[styles.countLabel, { color: `${textPrimary}59` }]}>
+              {files.length} / 3
+            </Text>
+          </View>
+        )}
+
+        {/* Action chips — empty slots */}
+        {(!hasNote || !hasLink || !hasAnyAttachment) && (
+          <View style={styles.actionChipRow}>
+            {!hasNote && (
+              <TouchableOpacity style={[styles.actionChip, { backgroundColor: chipFill }]} onPress={() => setEditingNote(true)}>
+                <Text style={[styles.actionChipLabel, { color: `${textPrimary}B3` }]}>+ Note</Text>
+              </TouchableOpacity>
+            )}
+            {!hasLink && (
+              <TouchableOpacity style={[styles.actionChip, { backgroundColor: chipFill }]} onPress={() => setEditingLink(true)}>
+                <Text style={[styles.actionChipLabel, { color: `${textPrimary}B3` }]}>+ Link</Text>
+              </TouchableOpacity>
+            )}
+            {!hasAnyAttachment && (
+              <TouchableOpacity style={[styles.actionChip, { backgroundColor: chipFill }]} onPress={showAttachmentSheet}>
+                <Text style={[styles.actionChipLabel, { color: `${textPrimary}B3` }]}>+ Attachment</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+
+      <PhotoLightbox
+        photos={photos}
+        initialIndex={lightboxIndex}
+        visible={lightboxVisible}
+        reduceMotion={reduceMotion}
+        onClose={() => setLightboxVisible(false)}
+      />
+    </KeyboardAvoidingView>
+  );
+}
+
+// --- Swipeable Item Card ---
+
 interface CardProps {
   item: Capture;
   type: 'task' | 'reminder';
@@ -38,15 +491,17 @@ interface CardProps {
   textPrimary: string;
   textMuted: string;
   reduceMotionRef: React.MutableRefObject<boolean>;
+  reduceMotion: boolean;
   onComplete: () => void;
   onDelete: () => void;
 }
 
-function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceMotionRef, onComplete, onDelete }: CardProps) {
+function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceMotionRef, reduceMotion, onComplete, onDelete }: CardProps) {
   const translateX = useRef(new Animated.Value(0)).current;
   const swipedRef = useRef(false);
   const confirmingRef = useRef(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const snapBack = useCallback(() => {
     const dur = reduceMotionRef.current ? 0 : 150;
@@ -92,6 +547,7 @@ function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceM
   const activeTextColor = `${textPrimary}E6`;
   const completedTextColor = `${textPrimary}66`;
   const timestampColor = `${textPrimary}73`;
+  const cardFill = expanded ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.07)';
 
   return (
     <View style={styles.cardOuter}>
@@ -101,7 +557,7 @@ function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceM
       </TouchableOpacity>
 
       <Animated.View
-        style={[styles.card, { transform: [{ translateX }] }]}
+        style={[styles.card, { backgroundColor: cardFill, transform: [{ translateX }] }]}
         {...panResponder.panHandlers}
       >
         {confirmingDelete ? (
@@ -119,37 +575,58 @@ function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceM
             </View>
           </View>
         ) : (
-          <View style={styles.cardContent}>
-            <TouchableOpacity
-              onPress={!item.completed ? onComplete : undefined}
-              disabled={item.completed}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {item.completed ? (
-                <CheckCircle size={20} color={accent} weight="fill" />
-              ) : type === 'task' ? (
-                <CircleIcon size={20} color={textMuted} weight="regular" />
-              ) : (
-                <Clock size={20} color={textMuted} weight="regular" />
-              )}
-            </TouchableOpacity>
-            <View style={styles.cardTextCol}>
-              <Text
-                style={[styles.cardText, { color: item.completed ? completedTextColor : activeTextColor }]}
-                numberOfLines={2}
+          <>
+            <View style={styles.cardContent}>
+              <TouchableOpacity
+                onPress={!item.completed ? onComplete : undefined}
+                disabled={item.completed}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {item.text}
-              </Text>
-              <Text style={[styles.timestamp, { color: timestampColor }]}>
-                {formatTimestamp(item.completed && item.completedAt ? item.completedAt : item.createdAt)}
-              </Text>
+                {item.completed ? (
+                  <CheckCircle size={20} color={accent} weight="fill" />
+                ) : type === 'task' ? (
+                  <CircleIcon size={20} color={textMuted} weight="regular" />
+                ) : (
+                  <Clock size={20} color={textMuted} weight="regular" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cardTextCol}
+                onPress={type === 'task' ? () => setExpanded(e => !e) : undefined}
+                activeOpacity={type === 'task' ? 0.7 : 1}
+              >
+                <Text
+                  style={[styles.cardText, { color: item.completed ? completedTextColor : activeTextColor }]}
+                  numberOfLines={2}
+                >
+                  {item.text}
+                </Text>
+                <Text style={[styles.timestamp, { color: timestampColor }]}>
+                  {formatTimestamp(item.completed && item.completedAt ? item.completedAt : item.createdAt)}
+                </Text>
+              </TouchableOpacity>
             </View>
-          </View>
+
+            {type === 'task' && expanded && (
+              <AttachmentArea
+                captureId={item.id}
+                initialNote={item.attachmentNote}
+                initialLink={item.attachmentLink}
+                initialPhotos={item.attachmentPhotos}
+                initialFiles={item.attachmentFiles}
+                accent={accent}
+                textPrimary={textPrimary}
+                reduceMotion={reduceMotion}
+              />
+            )}
+          </>
         )}
       </Animated.View>
     </View>
   );
 }
+
+// --- Main Screen ---
 
 export default function TasksRemindersScreen({ navigation }: Props) {
   const { theme } = useTheme();
@@ -293,6 +770,7 @@ export default function TasksRemindersScreen({ navigation }: Props) {
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+          keyboardShouldPersistTaps="handled"
         >
           {active.length === 0 ? (
             <Text style={[styles.emptyText, { color: `${c.textPrimary}73` }]}>
@@ -308,6 +786,7 @@ export default function TasksRemindersScreen({ navigation }: Props) {
                 textPrimary={c.textPrimary}
                 textMuted={c.textMuted}
                 reduceMotionRef={reduceMotionRef}
+                reduceMotion={reduceMotion}
                 onComplete={() => handleComplete(item)}
                 onDelete={() => handleDelete(item.id)}
               />
@@ -331,6 +810,7 @@ export default function TasksRemindersScreen({ navigation }: Props) {
                   textPrimary={c.textPrimary}
                   textMuted={c.textMuted}
                   reduceMotionRef={reduceMotionRef}
+                  reduceMotion={reduceMotion}
                   onComplete={() => {}}
                   onDelete={() => handleDelete(item.id)}
                 />
@@ -377,9 +857,7 @@ const styles = StyleSheet.create({
     gap: 4,
     flex: 1,
   },
-  backLabel: {
-    fontSize: 17,
-  },
+  backLabel: { fontSize: 17 },
   toggleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -390,9 +868,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  toggleLabel: {
-    fontSize: 15,
-  },
+  toggleLabel: { fontSize: 15 },
   toggleUnderline: {
     position: 'absolute',
     bottom: 0,
@@ -421,9 +897,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
   },
-  completedLabel: {
-    fontSize: 13,
-  },
+  completedLabel: { fontSize: 13 },
   showAllBtn: {
     alignItems: 'center',
     paddingVertical: 12,
@@ -454,7 +928,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -468,12 +941,8 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  cardText: {
-    fontSize: 16,
-  },
-  timestamp: {
-    fontSize: 13,
-  },
+  cardText: { fontSize: 16 },
+  timestamp: { fontSize: 13 },
   confirmRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -488,9 +957,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
-  cancelLabel: {
-    fontSize: 14,
-  },
+  cancelLabel: { fontSize: 14 },
   deleteConfirmLabel: {
     fontSize: 14,
     color: '#EF4444',
@@ -517,5 +984,179 @@ const styles = StyleSheet.create({
   toastUndo: {
     fontSize: 14,
     fontWeight: '500',
+  },
+
+  // Attachment area
+  attachDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginTop: 12,
+    marginHorizontal: -16,
+  },
+  attachArea: {
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  attachRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  attachRowContent: {
+    flex: 1,
+  },
+  attachRowText: {
+    fontSize: 15,
+  },
+  attachRemoveHit: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachInput: {
+    fontSize: 15,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  attachInputInline: {
+    flex: 1,
+    fontSize: 15,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    height: 40,
+  },
+  actionChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  actionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  actionChipLabel: {
+    fontSize: 14,
+  },
+
+  // Photo row
+  photoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  photoThumbWrap: {
+    position: 'relative',
+  },
+  photoThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+  },
+  photoBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoAddBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countLabel: {
+    fontSize: 13,
+  },
+
+  // File chips
+  fileChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  fileChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingLeft: 10,
+    paddingRight: 8,
+    gap: 6,
+  },
+  fileChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  fileChipName: {
+    fontSize: 13,
+    maxWidth: 120,
+  },
+
+  // Lightbox
+  lightboxRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.90)',
+    width: '100%' as any,
+  },
+  lightboxPage: {
+    width: '100%' as any,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lightboxImage: {
+    width: '100%' as any,
+    height: '80%' as any,
+  },
+  lightboxClose: {
+    position: 'absolute',
+    top: 56,
+    right: 20,
+  },
+  lightboxArrowLeft: {
+    position: 'absolute',
+    left: 16,
+    top: '50%' as any,
+    marginTop: -12,
+  },
+  lightboxArrowRight: {
+    position: 'absolute',
+    right: 16,
+    top: '50%' as any,
+    marginTop: -12,
+  },
+  lightboxDots: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  lightboxDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
   },
 });
