@@ -54,8 +54,6 @@ function hostnameFromURL(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
 }
 
-// --- Photo Lightbox ---
-
 interface LightboxProps {
   photos: string[];
   initialIndex: number;
@@ -159,8 +157,6 @@ function PhotoLightbox({ photos, initialIndex, visible, reduceMotion, onClose }:
     </Modal>
   );
 }
-
-// --- Attachment Area ---
 
 interface AttachmentAreaProps {
   captureId: string;
@@ -328,7 +324,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
       <View style={styles.attachDivider} />
       <View style={styles.attachArea}>
 
-        {/* Note slot */}
         {editingNote ? (
           <TextInput
             style={[styles.attachInput, { backgroundColor: inputFill, color: `${textPrimary}E6` }]}
@@ -357,7 +352,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
           </View>
         ) : null}
 
-        {/* Link slot */}
         {editingLink ? (
           <View style={styles.attachRow}>
             <LinkIcon size={16} color={iconColor} weight="regular" />
@@ -390,7 +384,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
           </View>
         ) : null}
 
-        {/* Photo row */}
         {hasAnyAttachment && (
           <View style={styles.photoRow}>
             {photos.map((uri, i) => (
@@ -418,7 +411,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
           </View>
         )}
 
-        {/* File chips */}
         {hasAnyAttachment && (
           <View style={styles.fileChipRow}>
             {files.map((f, i) => (
@@ -449,7 +441,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
           </View>
         )}
 
-        {/* Action chips — empty slots */}
         {(!hasNote || !hasLink || !hasAnyAttachment) && (
           <View style={styles.actionChipRow}>
             {!hasNote && (
@@ -481,8 +472,6 @@ function AttachmentArea({ captureId, initialNote, initialLink, initialPhotos, in
     </KeyboardAvoidingView>
   );
 }
-
-// --- Swipeable Item Card ---
 
 interface CardProps {
   item: Capture;
@@ -625,8 +614,6 @@ function SwipeableItemCard({ item, type, accent, textPrimary, textMuted, reduceM
     </View>
   );
 }
-
-// --- Main Screen ---
 
 export default function TasksRemindersScreen({ navigation }: Props) {
   const { theme } = useTheme();
@@ -857,7 +844,9 @@ const styles = StyleSheet.create({
     gap: 4,
     flex: 1,
   },
-  backLabel: { fontSize: 17 },
+  backLabel: {
+    fontSize: 17,
+  },
   toggleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -868,7 +857,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  toggleLabel: { fontSize: 15 },
+  toggleLabel: {
+    fontSize: 15,
+  },
   toggleUnderline: {
     position: 'absolute',
     bottom: 0,
@@ -897,7 +888,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
   },
-  completedLabel: { fontSize: 13 },
+  completedLabel: {
+    fontSize: 13,
+  },
   showAllBtn: {
     alignItems: 'center',
     paddingVertical: 12,
@@ -941,8 +934,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  cardText: { fontSize: 16 },
-  timestamp: { fontSize: 13 },
+  cardText: {
+    fontSize: 16,
+  },
+  timestamp: {
+    fontSize: 13,
+  },
   confirmRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -957,7 +954,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
-  cancelLabel: { fontSize: 14 },
+  cancelLabel: {
+    fontSize: 14,
+  },
   deleteConfirmLabel: {
     fontSize: 14,
     color: '#EF4444',
@@ -986,7 +985,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
-  // Attachment area
   attachDivider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.08)',
@@ -1044,7 +1042,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Photo row
   photoRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1084,7 +1081,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  // File chips
   fileChipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1111,7 +1107,6 @@ const styles = StyleSheet.create({
     maxWidth: 120,
   },
 
-  // Lightbox
   lightboxRoot: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.90)',

@@ -304,14 +304,12 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       </Animated.View>
 
-      {/* Swipe-up zone — captures upward drags from the bottom region when dock is hidden */}
       <View
         style={styles.swipeZone}
         {...swipeZonePanResponder.panHandlers}
         pointerEvents={dockOpen ? 'none' : 'auto'}
       />
 
-      {/* Nav dock */}
       <Animated.View
         style={[
           styles.dock,
@@ -330,7 +328,6 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
       </Animated.View>
 
-      {/* Arrow affordance — always on top of dock */}
       <View
         style={[styles.arrowAffordance, { bottom: insets.bottom + 16 }]}
         pointerEvents="box-none"
