@@ -17,7 +17,8 @@
         "NSCalendarsUsageDescription": "Used to show and create events in your calendar.",
         "NSPhotoLibraryUsageDescription": "Used to attach photos to your tasks.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {

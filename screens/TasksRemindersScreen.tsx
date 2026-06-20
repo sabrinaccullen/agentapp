@@ -12,10 +12,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { documentDirectory, copyAsync, makeDirectoryAsync } from 'expo-file-system/legacy';
 import {
-  CaretLeft, CircleIcon, CheckCircle, Clock, Trash,
+  CaretLeft, CaretRight, CircleIcon, CheckCircle, Clock, Trash,
   TextT, Link as LinkIcon, Plus, X as XIcon,
   FilePdf, FileDoc, FileImage, File as FileIcon,
-  CaretLeft as ArrowLeft, CaretRight as ArrowRight,
 } from 'phosphor-react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getAllCaptures, deleteCapture, setCompleted, updateAttachments, type Capture, type AttachmentFile } from '../utils/database';
@@ -127,7 +126,7 @@ function PhotoLightbox({ photos, initialIndex, visible, reduceMotion, onClose }:
                   setCurrentIndex(next);
                 }}
               >
-                <ArrowLeft size={24} color="rgba(255,255,255,0.7)" weight="regular" />
+                <CaretLeft size={24} color="rgba(255,255,255,0.7)" weight="regular" />
               </TouchableOpacity>
             )}
             {currentIndex < photos.length - 1 && (
@@ -139,7 +138,7 @@ function PhotoLightbox({ photos, initialIndex, visible, reduceMotion, onClose }:
                   setCurrentIndex(next);
                 }}
               >
-                <ArrowRight size={24} color="rgba(255,255,255,0.7)" weight="regular" />
+                <CaretRight size={24} color="rgba(255,255,255,0.7)" weight="regular" />
               </TouchableOpacity>
             )}
             <View style={styles.lightboxDots}>

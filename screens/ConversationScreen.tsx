@@ -42,9 +42,12 @@ export default function ConversationScreen() {
     setError('');
     setLoading(true);
     try {
-      const reply = await sendMessage(content, messages);
-      setMessages([...next, { role: 'assistant', content: reply }]);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      let accumulated = '';
+      await sendMessage(content, messages, (chunk) => {
+        accumulated += chunk;
+        setMessages([...next, { role: 'assistant', content: accumulated }]);
+        listRef.current?.scrollToEnd({ animated: true });
+      });
     } catch (e: any) {
       setError(e.message);
     } finally {
