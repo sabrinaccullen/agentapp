@@ -249,3 +249,24 @@ DECISION-013 established a 32px Display tier exception for Cormorant Garamond Se
 **Attachment area — tasks only:** Expansion and the attachment area are rendered only when `type === 'task'`. Reminder cards remain unchanged.
 
 **Card expansion:** Tapping the text/timestamp column of a task card toggles `expanded` state (internal to `SwipeableItemCard`). Card fill bumps from `rgba(255,255,255,0.07)` to `rgba(255,255,255,0.09)` when expanded, per spec. The `PanResponder` swipe behaviour is unaffected (it only captures dx > 8, never triggered by a tap).
+
+---
+
+## DECISION-032 — DYLD crash on launch: expo-modules-core ABI mismatch fixed via npx expo install --fix
+2026-06-19 | `package.json`
+
+App crashed immediately on launch (before JS ran) with a DYLD `EXC_CRASH/SIGABRT`. iOS crash log (bug_type 309) showed the termination reason as a missing Swift symbol: `_$s15ExpoModulesCore6RecordPAAE4from10dictionary10appContextxSDySSypG_AA03AppH0CtKFZ`. This symbol lives in `ExpoModulesCore` and is called by `ExpoFileSystem.xcframework` at load time.
+
+Root cause: `expo-file-system@56.0.8`'s prebuilt `ExpoFileSystem.xcframework` was compiled against `expo-modules-core@56.0.17+`, but the project was resolving `expo-modules-core@56.0.15` transitively. The ABI mismatch meant the framework's symbol could not be found at DYLD link time — before any JS executed.
+
+Fix: `npx expo install --fix` updated `expo` → `~56.0.12` (from `~56.0.9`), which transitively requires `expo-modules-core@~56.0.17`. The same run also updated `expo-audio`, `expo-notifications`, and `expo-sqlite` to their current SDK-compatible versions.
+
+**Do not pin `expo` to an older minor version** — the prebuilt native frameworks in the Expo SDK must stay in ABI sync. Run `npx expo install --fix` after any `expo` version change before triggering a build.
+
+The white screen before the crash was not a clue — it was `if (!fontsLoaded) return null` in `App.tsx` executing briefly before DYLD aborted the process.
+
+Two TypeScript fixes were applied in the same commit:
+- `TasksRemindersScreen.tsx`: removed duplicate `CaretLeft as ArrowLeft` import, added `CaretRight` directly.
+- `ConversationScreen.tsx`: `handleSend` updated to use the streaming `onToken` callback (3-arg `sendMessage`) after `sendMessage` signature changed in DECISION-022 but `ConversationScreen` was never updated (it is dormant — not in the navigator stack).
+
+Build number bumped to 3 (EAS auto-increment). Build ID: `b3136f1d-007e-4503-8b77-94d4ba706deb`.
