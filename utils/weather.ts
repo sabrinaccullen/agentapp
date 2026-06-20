@@ -153,7 +153,8 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherDat
     uvLabel: uvToLabel(cur.uv_index),
   };
 
-  // Find the hourly slot matching the current observation time.
+  // current.time is an observation timestamp that may not align to an hourly bucket;
+  // prefix-match on "YYYY-MM-DDTHH" to find the correct slot when exact match fails.
   let startIdx = data.hourly.time.indexOf(cur.time);
   if (startIdx === -1) {
     const hourPrefix = cur.time.substring(0, 13);

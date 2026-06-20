@@ -237,6 +237,13 @@ Undo toast uses a `setTimeout` of 4000ms cleared on unmount and on Undo tap. Tap
 
 **Photo lightbox:** `Modal` + `FlatList` (horizontal, pagingEnabled) + `PanResponder` swipe-down dismiss. No `react-native-image-viewing` dependency added — consistent with DECISION-023 (avoid unvetted native dependencies).
 
+---
+
+## DECISION-031 — 32px Cormorant Garamond standing exception extended to Calendar and Weather screens (HANDOFF-036, HANDOFF-035)
+2026-06-19 | `screens/CalendarScreen.tsx`, `screens/WeatherScreen.tsx`
+
+DECISION-013 established a 32px Display tier exception for Cormorant Garamond SemiBold on the Home Screen overlay wordmark. That exception is extended to the Calendar and Weather screens, which use the same font at the same size for large hero display text (the date in day view, and the current temperature). The intent is visual consistency across screens — all three uses are Cormorant Garamond SemiBold at 32px rendering as a prominent centrepiece element, not body text. Review flagged both as outside the 13–19px scale; Sabrina confirmed the extension is intentional.
+
 **File opening:** `Linking.openURL(path)` with a silent catch. The legacy file path returned by `documentDirectory` already starts with `file://`, making it a valid URI. On iOS, the system opens supported file types (PDFs, images) via Quick Look or the Files app; unsupported types fail silently.
 
 **Attachment area — tasks only:** Expansion and the attachment area are rendered only when `type === 'task'`. Reminder cards remain unchanged.

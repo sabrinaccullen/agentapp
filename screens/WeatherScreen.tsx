@@ -114,7 +114,6 @@ export default function WeatherScreen({ navigation }: Props) {
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
       <LinearGradient colors={gradient as [string, string]} style={StyleSheet.absoluteFill} />
 
-      {/* Top bar */}
       <View style={[styles.topBar, { top: topBarTop }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -175,7 +174,6 @@ export default function WeatherScreen({ navigation }: Props) {
 
       {status === 'loaded' && weather && (
         <View style={styles.contentArea}>
-          {/* Temperature block */}
           <View style={[styles.tempBlock, { top: SCREEN_HEIGHT * 0.35 }]}>
             <Text style={styles.temperature}>{weather.current.tempC}°</Text>
             <View style={styles.gap8} />
@@ -186,7 +184,6 @@ export default function WeatherScreen({ navigation }: Props) {
             </Text>
           </View>
 
-          {/* Bottom: metrics + hourly */}
           <View style={[styles.bottomSection, { bottom: bottomSectionBottom }]}>
             <View style={styles.separator} />
             <View style={styles.metricsRow}>

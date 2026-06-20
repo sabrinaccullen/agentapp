@@ -173,7 +173,6 @@ export default function CalendarScreen({ navigation }: Props) {
     }
   }, [permission, fetchEvents]);
 
-  // Auto-scroll timeline to current time on first load when viewing today
   useEffect(() => {
     if (permission !== 'granted') return;
     if (!isSameDay(viewedDate, today)) return;
@@ -191,7 +190,6 @@ export default function CalendarScreen({ navigation }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Toggle underline
   useEffect(() => {
     const target = viewMode === 'day' ? dayBtnLayout : monthBtnLayout;
     if (target.width === 0) return;
@@ -317,7 +315,6 @@ export default function CalendarScreen({ navigation }: Props) {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <LinearGradient colors={[c.bgStart, c.bgEnd]} style={StyleSheet.absoluteFill} />
 
-      {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 20 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <CaretLeft size={20} color={c.textPrimary} weight="regular" />
@@ -356,7 +353,6 @@ export default function CalendarScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       {permission === 'loading' ? null : permission === 'denied' ? (
         <View style={styles.deniedContainer}>
           <Text style={[styles.deniedText, { color: c.textSecondary }]}>Calendar access needed.</Text>
@@ -368,7 +364,6 @@ export default function CalendarScreen({ navigation }: Props) {
         <Animated.View style={[styles.viewContainer, { opacity: viewOpacity }]}>
           {viewMode === 'day' ? (
             <Animated.View style={[styles.dayView, { opacity: contentOpacity }]} {...panResponder.panHandlers}>
-              {/* Date display */}
               <View style={[styles.dateDisplay, { paddingHorizontal: H_MARGIN }]}>
                 <Text style={[styles.dateDayOfWeek, { color: c.textPrimary }]}>
                   {JS_DAYS[viewedDate.getDay()]}
@@ -381,7 +376,6 @@ export default function CalendarScreen({ navigation }: Props) {
                 </Text>
               </View>
 
-              {/* Timeline */}
               <ScrollView
                 ref={timelineScrollRef}
                 style={styles.timeline}
@@ -389,7 +383,6 @@ export default function CalendarScreen({ navigation }: Props) {
                 scrollEventThrottle={16}
               >
                 <View style={{ height: TOTAL_TIMELINE_H + insets.bottom + 32 }}>
-                  {/* Vertical track line */}
                   <View
                     style={[
                       styles.trackLine,
@@ -397,7 +390,6 @@ export default function CalendarScreen({ navigation }: Props) {
                     ]}
                   />
 
-                  {/* Hour labels */}
                   {HOUR_LABELS.map((label, i) => (
                     <Text
                       key={label}
@@ -410,7 +402,6 @@ export default function CalendarScreen({ navigation }: Props) {
                     </Text>
                   ))}
 
-                  {/* Current time indicator */}
                   {showCurrentTimeLine && (
                     <View
                       style={[
@@ -425,7 +416,6 @@ export default function CalendarScreen({ navigation }: Props) {
                     />
                   )}
 
-                  {/* Event cards */}
                   {eventsForDay(viewedDate).map(event => {
                     const topY = timeToY(event.startDate);
                     if (topY < 0 || topY > TOTAL_TIMELINE_H) return null;
@@ -457,18 +447,15 @@ export default function CalendarScreen({ navigation }: Props) {
               </ScrollView>
             </Animated.View>
           ) : (
-            /* Month view */
             <ScrollView
               style={styles.monthScroll}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
             >
-              {/* Month + year header */}
               <Text style={[styles.monthHeader, { color: c.textPrimary, paddingHorizontal: H_MARGIN }]}>
                 {MONTH_NAMES[viewedDate.getMonth()]} {viewedDate.getFullYear()}
               </Text>
 
-              {/* DOW headers */}
               <View style={[styles.dowRow, { paddingHorizontal: H_MARGIN }]}>
                 {DOW_SHORT.map((d, i) => (
                   <View key={i} style={[styles.dowCell, { width: cellW }]}>
@@ -477,7 +464,6 @@ export default function CalendarScreen({ navigation }: Props) {
                 ))}
               </View>
 
-              {/* Calendar grid */}
               <View style={{ paddingHorizontal: H_MARGIN }}>
                 {monthGrid.map((row, ri) => (
                   <View key={ri} style={styles.gridRow}>
@@ -525,10 +511,8 @@ export default function CalendarScreen({ navigation }: Props) {
                 ))}
               </View>
 
-              {/* Separator */}
               <View style={[styles.monthSeparator, { backgroundColor: c.separator, marginHorizontal: H_MARGIN }]} />
 
-              {/* Event list for selected day */}
               {eventsForDay(viewedDate).length === 0 ? (
                 <Text style={[styles.noEvents, { color: `${c.textPrimary}73` }]}>No events.</Text>
               ) : (
@@ -614,7 +598,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Day view
   dayView: {
     flex: 1,
   },
@@ -685,7 +668,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Month view
   monthScroll: {
     flex: 1,
   },
